@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom'
-import { LogOut, WifiOff, RefreshCw } from 'lucide-react'
+import { LogOut, WifiOff, RefreshCw, Menu } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getInitials } from '@/lib/utils'
 
@@ -42,9 +42,10 @@ function getTodayString() {
 interface HeaderProps {
   isOnline: boolean
   pendingSync: number
+  onMenuClick: () => void
 }
 
-export default function Header({ isOnline, pendingSync }: HeaderProps) {
+export default function Header({ isOnline, pendingSync, onMenuClick }: HeaderProps) {
   const location = useLocation()
   const { worker, logout } = useAuth()
   const path = '/' + location.pathname.split('/')[1]
@@ -53,11 +54,17 @@ export default function Header({ isOnline, pendingSync }: HeaderProps) {
 
   return (
     <header
-      className="flex items-center justify-between bg-white border-b border-gray-200 px-4 shrink-0 shadow-sm"
+      className="flex items-center justify-between bg-white border-b border-gray-200 px-3 shrink-0 shadow-sm"
       style={{ height: 'var(--header-height)' }}
     >
-      {/* Título de página */}
+      {/* Botón menú hamburguesa (solo móvil) + Título */}
       <div className="flex items-center gap-2 min-w-0">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 transition-colors shrink-0"
+        >
+          <Menu size={20} />
+        </button>
         <span className="text-lg shrink-0">{icon}</span>
         <div className="min-w-0">
           <h1 className="text-sm font-semibold text-gray-800 leading-tight truncate">{title}</h1>

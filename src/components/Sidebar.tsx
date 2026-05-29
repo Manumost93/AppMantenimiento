@@ -30,7 +30,7 @@ const sections = [
   { key: 'config', label: 'SISTEMA' },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const location = useLocation()
   const { isAdmin } = useAuth()
 
@@ -69,6 +69,7 @@ export default function Sidebar() {
                   <NavLink
                     key={item.path}
                     to={item.path}
+                    onClick={onClose}
                     className={cn(
                       'flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-all duration-150 my-0.5 group',
                       isActive
