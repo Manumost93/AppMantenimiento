@@ -1,0 +1,30 @@
+# Dependencias
+node_modules/
+
+# Build output
+out/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Variables de entorno
+.env
+.env.local
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code settings (privado)
+.claude/
+
+# PWA dev cache
+.vite/

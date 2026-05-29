@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IKEA Mantenimiento · Manuel Honrado Vega</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:    #2563EB;
+      --blue-l:  #EFF6FF;
+      --dark:    #0F172A;
+      --slate:   #1E293B;
+      --muted:   #64748B;
+      --border:  #E2E8F0;
+      --white:   #FFFFFF;
+      --yellow:  #FFDA1A;
+      --radius:  12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F8FAFC;
+      color: var(--dark);
+      line-height: 1.6;
+    }
+
+    /* ── NAV ── */
+    nav {
+      background: var(--slate);
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .nav-brand { display: flex; align-items: center; gap: 10px; }
+    .nav-logo {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: var(--yellow);
+      display: grid; place-items: center;
+      font-weight: 800; font-size: 14px; color: var(--dark);
+    }
+    .nav-name { color: var(--white); font-weight: 600; font-size: 15px; }
+    .nav-links { display: flex; gap: 1.5rem; }
+    .nav-links a {
+      color: #94A3B8; text-decoration: none; font-size: 14px;
+      transition: color .2s;
+    }
+    .nav-links a:hover { color: var(--white); }
+
+    /* ── HERO ── */
+    .hero {
+      background: linear-gradient(135deg, var(--slate) 0%, #0F172A 100%);
+      color: var(--white);
+      padding: 80px 2rem 100px;
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(37,99,235,.3);
+      color: #93C5FD;
+      border: 1px solid rgba(37,99,235,.4);
+      padding: 4px 14px;
+      border-radius: 99px;
+      font-size: 13px;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+    }
+    .hero h1 span { color: var(--yellow); }
+    .hero p {
+      font-size: 1.1rem;
+      color: #94A3B8;
+      max-width: 560px;
+      margin: 0 auto 2.5rem;
+    }
+    .hero-btns { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: var(--radius);
+      font-size: 15px; font-weight: 600;
+      text-decoration: none; cursor: pointer;
+      transition: transform .15s, opacity .15s;
+    }
+    .btn:hover { transform: translateY(-2px); opacity: .9; }
+    .btn-primary { background: var(--blue); color: var(--white); }
+    .btn-ghost {
+      background: rgba(255,255,255,.08);
+      color: var(--white);
+      border: 1px solid rgba(255,255,255,.15);
+    }
+    .hero-meta {
+      margin-top: 3rem;
+      display: flex; justify-content: center; gap: 2.5rem; flex-wrap: wrap;
+    }
+    .hero-meta span { color: #64748B; font-size: 13px; }
+    .hero-meta strong { color: #CBD5E1; }
+
+    /* ── SCREENSHOTS ── */
+    .section { padding: 80px 2rem; max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      text-align: center; font-size: 13px; font-weight: 600;
+      color: var(--blue); text-transform: uppercase;
+      letter-spacing: .08em; margin-bottom: .5rem;
+    }
+    .section-title {
+      text-align: center; font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 700; margin-bottom: .75rem;
+    }
+    .section-sub {
+      text-align: center; color: var(--muted); max-width: 500px;
+      margin: 0 auto 3rem;
+    }
+
+    .screenshots-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      gap: 1.5rem;
+    }
+    .screenshot-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,.06);
+      transition: box-shadow .2s, transform .2s;
+    }
+    .screenshot-card:hover {
+      box-shadow: 0 8px 32px rgba(0,0,0,.12);
+      transform: translateY(-3px);
+    }
+    .screenshot-card img {
+      width: 100%; display: block;
+      background: #E2E8F0;
+      min-height: 200px;
+    }
+    .screenshot-caption {
+      padding: 1rem 1.25rem;
+      font-size: 14px; font-weight: 600;
+      color: var(--slate);
+    }
+    .screenshot-caption span {
+      display: block; font-size: 13px;
+      font-weight: 400; color: var(--muted); margin-top: 2px;
+    }
+
+    /* ── FEATURES ── */
+    .features-bg { background: var(--white); }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+    }
+    .feature-card {
+      background: #F8FAFC;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+    .feature-icon {
+      font-size: 1.75rem; margin-bottom: .75rem;
+    }
+    .feature-card h3 { font-size: 15px; font-weight: 700; margin-bottom: .4rem; }
+    .feature-card p { font-size: 13px; color: var(--muted); }
+
+    /* ── TECH ── */
+    .tech-pills { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: center; }
+    .tech-pill {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 6px 16px;
+      font-size: 13px; font-weight: 600;
+      color: var(--slate);
+    }
+
+    /* ── DOWNLOAD ── */
+    .download-box {
+      background: linear-gradient(135deg, var(--blue) 0%, #1D4ED8 100%);
+      border-radius: 16px;
+      padding: 3rem 2rem;
+      text-align: center;
+      color: var(--white);
+    }
+    .download-box h2 { font-size: 1.75rem; font-weight: 700; margin-bottom: .75rem; }
+    .download-box p { color: rgba(255,255,255,.75); margin-bottom: 2rem; }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--slate);
+      color: #64748B;
+      text-align: center;
+      padding: 2rem;
+      font-size: 13px;
+    }
+    footer strong { color: #94A3B8; }
+
+    @media (max-width: 520px) {
+      .screenshots-grid { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <div class="nav-logo">IK</div>
+    <span class="nav-name">IKEA Mantenimiento</span>
+  </div>
+  <div class="nav-links">
+    <a href="#capturas">Capturas</a>
+    <a href="#funciones">Funciones</a>
+    <a href="#tecnologia">Tecnología</a>
+    <a href="https://github.com/Manumost93/AppMantenimiento" target="_blank">GitHub</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="badge">App de escritorio · Windows · Electron</div>
+  <h1>Gestión de equipo<br>de <span>mantenimiento</span></h1>
+  <p>
+    Herramienta interna para el equipo de mantenimiento de IKEA.
+    Dashboard diario, tareas, KONE, FOOD, COMIN/ION y mucho más.
+  </p>
+  <div class="hero-btns">
+    <a class="btn btn-primary" href="https://github.com/Manumost93/AppMantenimiento" target="_blank">
+      Ver en GitHub
+    </a>
+    <a class="btn btn-ghost" href="#capturas">Ver capturas</a>
+  </div>
+  <div class="hero-meta">
+    <span><strong>Electron 31</strong> · React 18</span>
+    <span><strong>TypeScript</strong> · Tailwind CSS</span>
+    <span><strong>v1.0.0</strong> · Fase 1 MVP</span>
+  </div>
+</section>
+
+<!-- SCREENSHOTS -->
+<section class="section" id="capturas">
+  <p class="section-label">Interfaz</p>
+  <h2 class="section-title">Capturas de pantalla</h2>
+  <p class="section-sub">Diseño moderno y visual pensado para el trabajo diario del equipo.</p>
+
+  <div class="screenshots-grid">
+    <div class="screenshot-card">
+      <img src="https://raw.githubusercontent.com/Manumost93/AppMantenimiento/main/screenshots/dashboard.png" alt="Dashboard · Vista de equipo" onerror="this.style.height='220px'" />
+      <div class="screenshot-caption">
+        Dashboard · Vista de equipo
+        <span>KPIs del día, tareas por compañero, visitas de proveedores y costes</span>
+      </div>
+    </div>
+    <div class="screenshot-card">
+      <img src="https://raw.githubusercontent.com/Manumost93/AppMantenimiento/main/screenshots/repairs.png" alt="Reparaciones generales" onerror="this.style.height='220px'" />
+      <div class="screenshot-caption">
+        Reparaciones generales
+        <span>Tabla de reparaciones con estado, prioridad, coste y responsable</span>
+      </div>
+    </div>
+    <div class="screenshot-card">
+      <img src="https://raw.githubusercontent.com/Manumost93/AppMantenimiento/main/screenshots/Informes.png" alt="Costes e informes" onerror="this.style.height='220px'" />
+      <div class="screenshot-caption">
+        Costes e informes por área
+        <span>Distribución de costes estimados por área y carga de trabajo del equipo</span>
+      </div>
+    </div>
+    <div class="screenshot-card">
+      <img src="https://raw.githubusercontent.com/Manumost93/AppMantenimiento/main/screenshots/Area.png" alt="Módulos por área" onerror="this.style.height='220px'" />
+      <div class="screenshot-caption">
+        Módulos por área
+        <span>Navegación dedicada para KONE / Ascensores, COMIN / ION y FOOD / Restaurante</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<div class="features-bg">
+  <section class="section" id="funciones">
+    <p class="section-label">Funcionalidades</p>
+    <h2 class="section-title">Todo lo que necesita el equipo</h2>
+    <p class="section-sub">Diseñado específicamente para el flujo de trabajo de mantenimiento en IKEA.</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📋</div>
+        <h3>Dashboard de equipo</h3>
+        <p>Vista diaria compartida con las tareas de cada compañero, KPIs y alertas urgentes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛗</div>
+        <h3>KONE / Ascensores</h3>
+        <p>Gestión de incidencias de ascensores, seguimiento y coordinación con el proveedor.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🍽️</div>
+        <h3>FOOD / Restaurante</h3>
+        <p>Incidencias y mantenimiento del área de restaurante, con historial y costes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🖼️</div>
+        <h3>COMIN / ION</h3>
+        <p>Trabajos de decoración y señalética, coordinación de visitas y retiradas.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔧</div>
+        <h3>Reparaciones generales</h3>
+        <p>Registro de todas las reparaciones del centro con estado, prioridad y coste.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📅</div>
+        <h3>Calendario</h3>
+        <p>Vista de calendario del equipo con todas las tareas y visitas de proveedores.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🏢</div>
+        <h3>Proveedores</h3>
+        <p>Directorio de proveedores con contactos, especialidad y historial de visitas.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📄</div>
+        <h3>Informes y PDF</h3>
+        <p>Generación de informes por área, compañero o periodo. Exportación a PDF.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- TECH -->
+<section class="section" id="tecnologia">
+  <p class="section-label">Stack técnico</p>
+  <h2 class="section-title">Tecnologías utilizadas</h2>
+  <p class="section-sub">Construida con herramientas modernas de desarrollo de apps de escritorio.</p>
+  <div class="tech-pills">
+    <span class="tech-pill">⚡ Electron 31</span>
+    <span class="tech-pill">⚛️ React 18</span>
+    <span class="tech-pill">🔷 TypeScript</span>
+    <span class="tech-pill">🎨 Tailwind CSS</span>
+    <span class="tech-pill">🗄️ SQLite (Fase 2)</span>
+    <span class="tech-pill">📅 FullCalendar 6</span>
+    <span class="tech-pill">📄 jsPDF</span>
+    <span class="tech-pill">🏗️ electron-vite</span>
+    <span class="tech-pill">🔷 lucide-react</span>
+    <span class="tech-pill">📦 date-fns</span>
+  </div>
+</section>
+
+<!-- DOWNLOAD -->
+<section style="padding: 0 2rem 80px; max-width: 700px; margin: 0 auto;">
+  <div class="download-box">
+    <h2>¿Quieres el código fuente?</h2>
+    <p>Proyecto completo disponible en GitHub. Fase 1 MVP con datos de ejemplo.<br>SQLite real y más funciones en desarrollo.</p>
+    <a class="btn" style="background:white; color:#1D4ED8; margin: 0 auto;"
+       href="https://github.com/Manumost93/AppMantenimiento" target="_blank">
+      Ver repositorio en GitHub →
+    </a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  Desarrollado por <strong>Manuel Honrado Vega</strong> ·
+  IKEA Mantenimiento v1.0.0 · 2025 ·
+  <a href="https://github.com/Manumost93/AppMantenimiento" target="_blank"
+     style="color:#60A5FA; text-decoration:none;">GitHub</a>
+</footer>
+
+</body>
+</html>
