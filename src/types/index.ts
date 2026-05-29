@@ -13,6 +13,7 @@ export interface TeamMember {
   role: string
   color: string
   active: boolean
+  is_admin?: boolean
   pin_hash?: string
   observations?: string
   created_at?: string

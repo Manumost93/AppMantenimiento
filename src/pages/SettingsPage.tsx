@@ -1,17 +1,27 @@
 import { useState, useEffect } from 'react'
-import { Settings, Plus, Edit2, Trash2, Key, Info, Shield } from 'lucide-react'
+import { Settings, Plus, Edit2, Trash2, Key, Info, Shield, Lock } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { getAreas, upsertArea, deleteArea, getWorkers, setWorkerPin } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
 import type { Area, TeamMember } from '@/types'
 import { cn } from '@/lib/utils'
 
 type Tab = 'sections' | 'pin' | 'about'
 
 export default function SettingsPage() {
-  const { worker } = useAuth()
+  const { worker, isAdmin } = useAuth()
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+        <Lock size={48} className="text-gray-300 mb-4" />
+        <h2 className="text-lg font-semibold text-gray-700 mb-2">Acceso restringido</h2>
+        <p className="text-sm text-gray-400 max-w-xs">Esta sección es solo para administradores. Contacta con el encargado si necesitas hacer cambios.</p>
+      </div>
+    )
+  }
   const [tab, setTab] = useState<Tab>('sections')
 
   // ── Secciones ──────────────────────────────────────────────────────────────

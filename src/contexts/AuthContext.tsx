@@ -3,6 +3,7 @@ import type { TeamMember } from '@/types'
 
 interface AuthContextType {
   worker: TeamMember | null
+  isAdmin: boolean
   login: (worker: TeamMember) => void
   logout: () => void
   isLoading: boolean
@@ -36,8 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_KEY)
   }
 
+  const isAdmin = worker?.is_admin === true
+
   return (
-    <AuthContext.Provider value={{ worker, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ worker, isAdmin, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   )

@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog } from '@/components/ui/dialog'
 import { getWorkers, upsertWorker, deleteWorker, toggleWorkerActive } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import type { TeamMember } from '@/types'
 import { cn, getInitials } from '@/lib/utils'
 
 export default function TeamPage() {
+  const { isAdmin } = useAuth()
   const [team, setTeam] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<TeamMember | null>(null)
@@ -83,10 +85,12 @@ export default function TeamPage() {
           <h2 className="text-base font-bold text-gray-900">Equipo de mantenimiento</h2>
           <p className="text-xs text-gray-500">{team.filter(m => m.active).length} compañeros activos</p>
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus size={14} />
-          Nuevo compañero
-        </Button>
+        {isAdmin && (
+          <Button size="sm" onClick={openCreate}>
+            <Plus size={14} />
+            Nuevo compañero
+          </Button>
+        )}
       </div>
 
       {error && <p className="text-red-500 text-sm">{error}</p>}
@@ -119,17 +123,19 @@ export default function TeamPage() {
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5">{member.role}</p>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <button onClick={() => openEdit(member)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Editar">
-                      <Edit2 size={14} />
-                    </button>
-                    <button onClick={() => handleToggleActive(member)} className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors" title={member.active ? 'Desactivar' : 'Activar'}>
-                      {member.active ? <UserX size={14} /> : <UserCheck size={14} />}
-                    </button>
-                    <button onClick={() => handleDelete(member)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Eliminar">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex gap-1 shrink-0">
+                      <button onClick={() => openEdit(member)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Editar">
+                        <Edit2 size={14} />
+                      </button>
+                      <button onClick={() => handleToggleActive(member)} className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors" title={member.active ? 'Desactivar' : 'Activar'}>
+                        {member.active ? <UserX size={14} /> : <UserCheck size={14} />}
+                      </button>
+                      <button onClick={() => handleDelete(member)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Eliminar">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-2 flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: member.color }} />
