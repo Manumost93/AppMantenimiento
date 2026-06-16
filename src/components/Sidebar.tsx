@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   Calendar, LayoutDashboard, User, Users, Truck, FolderOpen,
   Building2, Paintbrush2, UtensilsCrossed, Wrench,
-  BarChart2, Settings, ChevronRight, Shield
+  BarChart2, Settings, ChevronRight, Shield, ClipboardCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -12,6 +12,7 @@ const navItems = [
   { path: '/dashboard', icon: LayoutDashboard,    label: 'Dashboard',          section: 'main',   adminOnly: false },
   { path: '/my-area',   icon: User,               label: 'Mi Área Personal',   section: 'main',   adminOnly: false },
   { path: '/repairs',   icon: Wrench,             label: 'Reparaciones',       section: 'work',   adminOnly: false },
+  { path: '/rondas',    icon: ClipboardCheck,     label: 'Rondas Apertura/Cierre', section: 'work', adminOnly: false },
   { path: '/kone',      icon: Building2,          label: 'KONE / Ascensores',  section: 'areas',  adminOnly: false },
   { path: '/comin-ion', icon: Paintbrush2,        label: 'COMIN / ION',        section: 'areas',  adminOnly: false },
   { path: '/food',      icon: UtensilsCrossed,    label: 'FOOD / Restaurante', section: 'areas',  adminOnly: false },
@@ -103,7 +104,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <div className="text-slate-400 font-medium text-[11px]">IKEA Mantenimiento</div>
           <div>Desarrollado por</div>
           <div className="text-slate-300 font-medium">Manuel Honrado Vega</div>
-          <div className="text-slate-600 mt-0.5">v1.0.0 · 2025</div>
+          <div className="text-slate-600 mt-0.5">v2.0.0 · 2025</div>
         </div>
       </div>
     </aside>

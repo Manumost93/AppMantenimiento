@@ -78,8 +78,9 @@ export interface Task {
 export interface Document {
   id: number
   name: string
-  type: string
+  type: 'link' | 'pdf' | 'image' | 'excel' | 'word' | 'file'
   path: string
+  file_url?: string
   area?: string
   task_id?: number
   uploaded_at: string
@@ -223,4 +224,35 @@ export interface TaskFilters {
   status?: TaskStatus
   priority?: TaskPriority
   search?: string
+}
+
+// ─── Estadísticas de carga de trabajo por persona ────────────────────────────
+
+export interface WorkerTaskStats {
+  worker: TeamMember
+  pending: number
+  inprogress: number
+  blocked: number
+  done: number
+  total: number
+}
+
+// ─── Rondas de apertura/cierre ───────────────────────────────────────────────
+
+export type TipoRonda = 'apertura' | 'cierre'
+
+export interface RondaEntry {
+  id: number
+  fecha: string
+  hora: string
+  tipo: TipoRonda
+  worker_id?: number
+  worker?: TeamMember
+  lectura_luz?: number
+  lectura_agua?: number
+  arranques_jockey?: number
+  arranques_compresor?: number
+  temperatura?: number
+  observaciones?: string
+  created_at: string
 }

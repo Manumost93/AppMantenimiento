@@ -11,7 +11,7 @@ export function Card({ children, className, onClick }: CardProps) {
   return (
     <div
       className={cn(
-        'bg-white rounded-xl border border-gray-200 shadow-sm',
+        'bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm',
         onClick && 'cursor-pointer hover:shadow-md transition-shadow',
         className
       )}
@@ -23,11 +23,19 @@ export function Card({ children, className, onClick }: CardProps) {
 }
 
 export function CardHeader({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('px-4 py-3 border-b border-gray-100', className)}>{children}</div>
+  return (
+    <div className={cn('px-4 py-3 border-b border-gray-100 dark:border-slate-700', className)}>
+      {children}
+    </div>
+  )
 }
 
 export function CardTitle({ children, className }: { children: ReactNode; className?: string }) {
-  return <h3 className={cn('font-semibold text-gray-800 text-sm', className)}>{children}</h3>
+  return (
+    <h3 className={cn('font-semibold text-gray-800 dark:text-slate-100 text-sm', className)}>
+      {children}
+    </h3>
+  )
 }
 
 export function CardContent({ children, className }: { children: ReactNode; className?: string }) {

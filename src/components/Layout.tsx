@@ -10,7 +10,6 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
 
-  // Cierra el sidebar al cambiar de página en móvil
   useEffect(() => {
     setSidebarOpen(false)
   }, [location.pathname])
@@ -31,8 +30,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
-      {/* Overlay oscuro en móvil cuando el sidebar está abierto */}
+    <div className="flex h-screen bg-gray-100 dark:bg-slate-900 overflow-hidden">
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-20 lg:hidden"
@@ -40,7 +38,6 @@ export default function Layout({ children }: { children: ReactNode }) {
         />
       )}
 
-      {/* Sidebar: fijo en desktop, slide-over en móvil */}
       <div className={`
         fixed lg:static inset-y-0 left-0 z-30
         transform transition-transform duration-200 ease-in-out

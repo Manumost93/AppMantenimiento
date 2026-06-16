@@ -29,13 +29,13 @@ export function Dialog({ open, onClose, title, children, size = 'md' }: DialogPr
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={cn('relative bg-white rounded-xl shadow-2xl w-full mx-4', sizeMap[size])}>
+      <div className={cn('relative bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full mx-4', sizeMap[size])}>
         {title && (
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-            <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-700">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">{title}</h2>
             <button
               onClick={onClose}
-              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded transition-colors"
             >
               <X size={16} />
             </button>

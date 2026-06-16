@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import type {
   TeamMember, Provider, Area, Task, KoneIncident,
   CominIonJob, FoodIncident, GeneralRepair,
-  PersonalNote, MaterialRequest,
+  PersonalNote, MaterialRequest, Document,
+  WorkerTaskStats, RondaEntry,
 } from '@/types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
@@ -398,6 +399,163 @@ export async function removeFavoriteProvider(workerId: number, providerId: numbe
     .delete()
     .eq('worker_id', workerId)
     .eq('provider_id', providerId)
+  if (error) throw error
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
+// ─── Documentos con Supabase Storage ─────────────────────────────────────────
+// Nota: Crea un bucket público llamado "documents" en Supabase Storage → Storage → New Bucket
+
+export async function getDocuments(): Promise<Document[]> {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .order('uploaded_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(doc => {
+    if (doc.type !== 'link' && doc.path && !doc.path.startsWith('http')) {
+      const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(doc.path)
+      return { ...doc, file_url: publicUrl }
+    }
+    return { ...doc, file_url: doc.path }
+  })
+}
+
+export async function uploadDocumentFile(
+  file: File,
+  metadata: { name: string; area: string; observations?: string }
+): Promise<Document> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  const typeMap: Record<string, string> = {
+    pdf: 'pdf', jpg: 'image', jpeg: 'image', png: 'image',
+    gif: 'image', webp: 'image', xls: 'excel', xlsx: 'excel',
+    doc: 'word', docx: 'word',
+  }
+  const type = typeMap[ext] || 'file'
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `${metadata.area}/${Date.now()}-${safeName}`
+
+  const { error: uploadError } = await supabase.storage.from('documents').upload(path, file)
+  if (uploadError) throw uploadError
+
+  const { data, error } = await supabase
+    .from('documents')
+    .insert({
+      name: metadata.name,
+      type,
+      path,
+      area: metadata.area,
+      observations: metadata.observations,
+      uploaded_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+  if (error) {
+    await supabase.storage.from('documents').remove([path])
+    throw error
+  }
+  const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(path)
+  return { ...data, file_url: publicUrl }
+}
+
+export async function addDocumentLink(
+  url: string,
+  metadata: { name: string; area: string; observations?: string }
+): Promise<Document> {
+  const { data, error } = await supabase
+    .from('documents')
+    .insert({
+      name: metadata.name,
+      type: 'link',
+      path: url,
+      area: metadata.area,
+      observations: metadata.observations,
+      uploaded_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return { ...data, file_url: url }
+}
+
+export async function deleteDocument(id: number, path: string, type: string): Promise<void> {
+  if (type !== 'link' && !path.startsWith('http')) {
+    await supabase.storage.from('documents').remove([path])
+  }
+  const { error } = await supabase.from('documents').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── Estadísticas de carga de trabajo ────────────────────────────────────────
+
+export async function getWorkerTaskStats(): Promise<WorkerTaskStats[]> {
+  const [{ data: workers }, { data: tasks }] = await Promise.all([
+    supabase.from('workers').select('*').eq('active', true).order('name'),
+    supabase.from('tasks').select('responsible_id, status').eq('is_personal', false),
+  ])
+  if (!workers) return []
+  const taskList = tasks ?? []
+  return (workers as TeamMember[])
+    .map(worker => {
+      const mine = taskList.filter(t => t.responsible_id === worker.id)
+      return {
+        worker,
+        pending: mine.filter(t => t.status === 'pending').length,
+        inprogress: mine.filter(t => t.status === 'inprogress').length,
+        blocked: mine.filter(t => t.status === 'blocked').length,
+        done: mine.filter(t => t.status === 'done').length,
+        total: mine.filter(t => t.status !== 'done' && t.status !== 'cancelled').length,
+      }
+    })
+    .filter(s => s.total > 0 || s.done > 0)
+    .sort((a, b) => b.total - a.total)
+}
+
+// ─── Rondas de apertura/cierre ───────────────────────────────────────────────
+// SQL necesario en Supabase:
+// CREATE TABLE IF NOT EXISTS rondas (
+//   id BIGSERIAL PRIMARY KEY,
+//   fecha DATE NOT NULL,
+//   hora TIME NOT NULL,
+//   tipo TEXT NOT NULL CHECK (tipo IN ('apertura', 'cierre')),
+//   worker_id BIGINT REFERENCES workers(id),
+//   lectura_luz NUMERIC(12,2),
+//   lectura_agua NUMERIC(12,2),
+//   arranques_jockey INTEGER DEFAULT 0,
+//   arranques_compresor INTEGER DEFAULT 0,
+//   temperatura NUMERIC(5,1),
+//   observaciones TEXT,
+//   created_at TIMESTAMPTZ DEFAULT NOW()
+// );
+
+export async function getRondas(fecha?: string): Promise<RondaEntry[]> {
+  let query = supabase
+    .from('rondas')
+    .select('*, worker:workers!worker_id(id,name,color)')
+    .order('fecha', { ascending: false })
+    .order('hora', { ascending: false })
+  if (fecha) query = query.eq('fecha', fecha)
+  const { data, error } = await query.limit(60)
+  if (error) throw error
+  return (data ?? []).map(r => ({ ...r, worker: r.worker ?? undefined }))
+}
+
+export async function upsertRonda(ronda: Partial<RondaEntry>): Promise<RondaEntry> {
+  const payload = { ...ronda } as Record<string, unknown>
+  delete payload.worker
+  if (!payload.id) delete payload.id
+  const { data, error } = await supabase
+    .from('rondas')
+    .upsert(payload)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteRonda(id: number): Promise<void> {
+  const { error } = await supabase.from('rondas').delete().eq('id', id)
   if (error) throw error
 }
 

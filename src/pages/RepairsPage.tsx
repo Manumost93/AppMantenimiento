@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Wrench, CheckCircle2, Clock, AlertCircle, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Search, Wrench, CheckCircle2, Clock, AlertCircle, Edit2, Trash2, Eye } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { getRepairs, upsertRepair, deleteRepair, getWorkers, getAreas } from '@/lib/supabase'
 import type { GeneralRepair, TeamMember, Area } from '@/types'
-import { cn, STATUS_LABELS, STATUS_CLASSES, PRIORITY_LABELS, PRIORITY_CLASSES, formatCurrency, formatDateShort, todayIso } from '@/lib/utils'
+import { cn, STATUS_LABELS, STATUS_CLASSES, PRIORITY_LABELS, PRIORITY_CLASSES, formatCurrency, formatDateShort, todayIso, getInitials } from '@/lib/utils'
 
 export default function RepairsPage() {
   const [repairs, setRepairs] = useState<GeneralRepair[]>([])
@@ -16,6 +16,7 @@ export default function RepairsPage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [filterMember, setFilterMember] = useState('')
   const [showDialog, setShowDialog] = useState(false)
+  const [showDetail, setShowDetail] = useState(false)
   const [selected, setSelected] = useState<GeneralRepair | null>(null)
   const [form, setForm] = useState<Partial<GeneralRepair>>({
     status: 'pending', priority: 'medium', material_cost: 0, labor_cost: 0, total_cost: 0, blocked_by_material: false,
@@ -48,10 +49,17 @@ export default function RepairsPage() {
     setShowDialog(true)
   }
 
-  function openEdit(r: GeneralRepair) {
+  function openEdit(r: GeneralRepair, e?: React.MouseEvent) {
+    e?.stopPropagation()
     setSelected(r)
     setForm({ ...r })
+    setShowDetail(false)
     setShowDialog(true)
+  }
+
+  function openDetail(r: GeneralRepair) {
+    setSelected(r)
+    setShowDetail(true)
   }
 
   async function handleSave() {
@@ -64,7 +72,11 @@ export default function RepairsPage() {
         request_date: form.request_date || todayIso(),
       }
       const saved = await upsertRepair(payload)
-      const withRelations = { ...saved, responsible: workers.find(w => w.id === saved.responsible_id), area: areas.find(a => a.id === saved.area_id)?.name || saved.area }
+      const withRelations = {
+        ...saved,
+        responsible: workers.find(w => w.id === saved.responsible_id),
+        area: areas.find(a => a.id === saved.area_id)?.name || saved.area,
+      }
       setRepairs(prev => selected ? prev.map(r => r.id === selected.id ? withRelations : r) : [withRelations, ...prev])
       setShowDialog(false)
     } catch {
@@ -74,17 +86,19 @@ export default function RepairsPage() {
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: number, e?: React.MouseEvent) {
+    e?.stopPropagation()
     if (!confirm('¿Eliminar esta reparación?')) return
     try {
       await deleteRepair(id)
       setRepairs(prev => prev.filter(r => r.id !== id))
+      setShowDetail(false)
     } catch {
       alert('No se pudo eliminar.')
     }
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando reparaciones...</div>
+  if (loading) return <div className="p-5 text-center text-gray-400 dark:text-slate-500">Cargando reparaciones...</div>
 
   return (
     <div className="p-5 space-y-4">
@@ -92,23 +106,22 @@ export default function RepairsPage() {
         <div className="flex items-center gap-2">
           <Wrench size={20} className="text-orange-600" />
           <div>
-            <h2 className="text-base font-bold text-gray-900">Reparaciones generales</h2>
-            <p className="text-xs text-gray-500">{repairs.length} reparaciones · {formatCurrency(stats.totalCost)}</p>
+            <h2 className="text-base font-bold text-gray-900 dark:text-white">Reparaciones generales</h2>
+            <p className="text-xs text-gray-500 dark:text-slate-400">{repairs.length} reparaciones · {formatCurrency(stats.totalCost)}</p>
           </div>
         </div>
         <Button size="sm" onClick={openCreate}>
-          <Plus size={14} />
-          Nueva reparación
+          <Plus size={14} /> Nueva reparación
         </Button>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Pendientes', value: stats.pending, icon: <Clock size={16} />, color: 'text-gray-600', bg: 'bg-gray-50' },
-          { label: 'En curso', value: stats.inprogress, icon: <Clock size={16} />, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Bloqueadas', value: stats.blocked, icon: <AlertCircle size={16} />, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'Finalizadas', value: stats.done, icon: <CheckCircle2 size={16} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+          { label: 'Pendientes', value: stats.pending, icon: <Clock size={16} />, color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-50 dark:bg-slate-700' },
+          { label: 'En curso', value: stats.inprogress, icon: <Clock size={16} />, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30' },
+          { label: 'Bloqueadas', value: stats.blocked, icon: <AlertCircle size={16} />, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/30' },
+          { label: 'Finalizadas', value: stats.done, icon: <CheckCircle2 size={16} />, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/30' },
         ].map(kpi => (
           <Card key={kpi.label}>
             <CardContent className="py-3">
@@ -116,7 +129,7 @@ export default function RepairsPage() {
                 <div className={cn('p-2 rounded-lg', kpi.bg, kpi.color)}>{kpi.icon}</div>
                 <div>
                   <div className={cn('text-xl font-bold', kpi.color)}>{kpi.value}</div>
-                  <div className="text-[11px] text-gray-500">{kpi.label}</div>
+                  <div className="text-[11px] text-gray-500 dark:text-slate-400">{kpi.label}</div>
                 </div>
               </div>
             </CardContent>
@@ -128,39 +141,53 @@ export default function RepairsPage() {
       <div className="flex gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-            placeholder="Buscar reparaciones..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input
+            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+            placeholder="Buscar reparaciones..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
-        <select className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none"
-          value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+        <select
+          className="text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white focus:outline-none"
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+        >
           <option value="">Todos los estados</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <select className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none"
-          value={filterMember} onChange={e => setFilterMember(e.target.value)}>
+        <select
+          className="text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white focus:outline-none"
+          value={filterMember}
+          onChange={e => setFilterMember(e.target.value)}
+        >
           <option value="">Todos los compañeros</option>
           {workers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm overflow-x-auto">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden shadow-sm overflow-x-auto">
         <table className="w-full text-sm min-w-[600px]">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
             <tr>
               {['Fecha', 'Área', 'Descripción', 'Responsable', 'Coste', 'Estado', 'Acciones'].map(h => (
-                <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
+                <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
             {filtered.map(repair => (
-              <tr key={repair.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">{formatDateShort(repair.request_date)}</td>
-                <td className="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">{repair.area || '—'}</td>
-                <td className="px-4 py-2.5 text-xs text-gray-800 max-w-[200px]">
+              <tr
+                key={repair.id}
+                className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                onClick={() => openDetail(repair)}
+              >
+                <td className="px-4 py-2.5 text-xs text-gray-600 dark:text-slate-300 whitespace-nowrap">{formatDateShort(repair.request_date)}</td>
+                <td className="px-4 py-2.5 text-xs text-gray-600 dark:text-slate-300 whitespace-nowrap">{repair.area || '—'}</td>
+                <td className="px-4 py-2.5 text-xs text-gray-800 dark:text-slate-200 max-w-[200px]">
                   <div className="truncate">{repair.description}</div>
-                  {repair.blocked_by_material && <span className="text-[10px] text-amber-600 font-medium">⏸ Esperando material</span>}
+                  {repair.blocked_by_material && <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">⏸ Esperando material</span>}
                 </td>
                 <td className="px-4 py-2.5">
                   {repair.responsible ? (
@@ -169,11 +196,11 @@ export default function RepairsPage() {
                         style={{ backgroundColor: repair.responsible.color }}>
                         {repair.responsible.name[0]}
                       </div>
-                      <span className="text-xs text-gray-700">{repair.responsible.name.split(' ')[0]}</span>
+                      <span className="text-xs text-gray-700 dark:text-slate-300">{repair.responsible.name.split(' ')[0]}</span>
                     </div>
-                  ) : <span className="text-xs text-gray-400">—</span>}
+                  ) : <span className="text-xs text-gray-400 dark:text-slate-500">—</span>}
                 </td>
-                <td className="px-4 py-2.5 text-xs font-medium text-gray-700 whitespace-nowrap">{formatCurrency(repair.total_cost)}</td>
+                <td className="px-4 py-2.5 text-xs font-medium text-gray-700 dark:text-slate-200 whitespace-nowrap">{formatCurrency(repair.total_cost)}</td>
                 <td className="px-4 py-2.5">
                   <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap', STATUS_CLASSES[repair.status])}>
                     {STATUS_LABELS[repair.status]}
@@ -181,10 +208,25 @@ export default function RepairsPage() {
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1">
-                    <button onClick={() => openEdit(repair)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
+                    <button
+                      onClick={e => { e.stopPropagation(); openDetail(repair) }}
+                      className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                      title="Ver detalles"
+                    >
+                      <Eye size={13} />
+                    </button>
+                    <button
+                      onClick={e => openEdit(repair, e)}
+                      className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded transition-colors"
+                      title="Editar"
+                    >
                       <Edit2 size={13} />
                     </button>
-                    <button onClick={() => handleDelete(repair.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
+                    <button
+                      onClick={e => handleDelete(repair.id, e)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                      title="Eliminar"
+                    >
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -193,27 +235,140 @@ export default function RepairsPage() {
             ))}
           </tbody>
         </table>
-        {filtered.length === 0 && <div className="text-center py-8 text-gray-400 text-sm">No hay reparaciones</div>}
+        {filtered.length === 0 && (
+          <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">No hay reparaciones</div>
+        )}
       </div>
 
-      {/* Dialog */}
+      {/* Dialog detalle */}
+      {selected && (
+        <Dialog open={showDetail} onClose={() => setShowDetail(false)} title="Detalle de reparación" size="md">
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-0.5">Fecha solicitud</p>
+                <p className="text-sm font-medium text-gray-800 dark:text-white">{formatDateShort(selected.request_date)}</p>
+              </div>
+              {selected.planned_date && (
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-0.5">Fecha prevista</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-white">{formatDateShort(selected.planned_date)}</p>
+                </div>
+              )}
+              {selected.completion_date && (
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-0.5">Fecha finalización</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-white">{formatDateShort(selected.completion_date)}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-0.5">Área</p>
+                <p className="text-sm font-medium text-gray-800 dark:text-white">{selected.area || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-0.5">Estado</p>
+                <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_CLASSES[selected.status])}>
+                  {STATUS_LABELS[selected.status]}
+                </span>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-0.5">Prioridad</p>
+                <span className={cn('px-2 py-0.5 rounded text-xs font-medium', PRIORITY_CLASSES[selected.priority])}>
+                  {PRIORITY_LABELS[selected.priority]}
+                </span>
+              </div>
+            </div>
+
+            {selected.responsible && (
+              <div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-1.5">Responsable</p>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                    style={{ backgroundColor: selected.responsible.color }}>
+                    {getInitials(selected.responsible.name)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800 dark:text-white">{selected.responsible.name}</p>
+                    <p className="text-xs text-gray-400 dark:text-slate-500">{selected.responsible.role}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Descripción</p>
+              <p className="text-sm text-gray-700 dark:text-slate-200 bg-gray-50 dark:bg-slate-700 rounded-lg p-3">{selected.description}</p>
+            </div>
+
+            {selected.materials_needed && (
+              <div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Materiales</p>
+                <p className="text-sm text-gray-700 dark:text-slate-200">{selected.materials_needed}</p>
+              </div>
+            )}
+
+            {selected.external_company && (
+              <div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Empresa externa</p>
+                <p className="text-sm text-gray-700 dark:text-slate-200">{selected.external_company}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-3 bg-gray-50 dark:bg-slate-700 rounded-lg p-3">
+              <div className="text-center">
+                <p className="text-xs text-gray-500 dark:text-slate-400">Material</p>
+                <p className="text-sm font-bold text-gray-800 dark:text-white">{formatCurrency(selected.material_cost)}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-500 dark:text-slate-400">Mano de obra</p>
+                <p className="text-sm font-bold text-gray-800 dark:text-white">{formatCurrency(selected.labor_cost)}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-500 dark:text-slate-400">Total</p>
+                <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{formatCurrency(selected.total_cost)}</p>
+              </div>
+            </div>
+
+            {selected.blocked_by_material && (
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
+                <AlertCircle size={14} />
+                <span className="text-xs font-medium">Bloqueada por falta de material</span>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1 border-t border-gray-100 dark:border-slate-700">
+              <Button variant="outline" className="flex-1" onClick={() => openEdit(selected)}>
+                <Edit2 size={13} /> Editar
+              </Button>
+              <button
+                onClick={() => handleDelete(selected.id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                <Trash2 size={13} /> Eliminar
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+
+      {/* Dialog crear/editar */}
       <Dialog open={showDialog} onClose={() => setShowDialog(false)} title={selected ? 'Editar reparación' : 'Nueva reparación'}>
         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Fecha solicitud</label>
-            <input type="date" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Fecha solicitud</label>
+            <input type="date" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.request_date || todayIso()}
               onChange={e => setForm(f => ({ ...f, request_date: e.target.value }))} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Fecha prevista</label>
-            <input type="date" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Fecha prevista</label>
+            <input type="date" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.planned_date || ''}
               onChange={e => setForm(f => ({ ...f, planned_date: e.target.value || undefined }))} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Sección</label>
-            <select className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Sección</label>
+            <select className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.area_id || ''}
               onChange={e => setForm(f => ({ ...f, area_id: e.target.value ? Number(e.target.value) : undefined }))}>
               <option value="">Sin sección</option>
@@ -221,8 +376,8 @@ export default function RepairsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Responsable</label>
-            <select className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Responsable</label>
+            <select className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.responsible_id || ''}
               onChange={e => setForm(f => ({ ...f, responsible_id: e.target.value ? Number(e.target.value) : undefined }))}>
               <option value="">Sin asignar</option>
@@ -230,8 +385,8 @@ export default function RepairsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Prioridad</label>
-            <select className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Prioridad</label>
+            <select className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.priority || 'medium'}
               onChange={e => setForm(f => ({ ...f, priority: e.target.value as GeneralRepair['priority'] }))}>
               <option value="low">Baja</option>
@@ -241,34 +396,34 @@ export default function RepairsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
-            <select className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Estado</label>
+            <select className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.status || 'pending'}
               onChange={e => setForm(f => ({ ...f, status: e.target.value as GeneralRepair['status'] }))}>
               {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Coste material (€)</label>
-            <input type="number" min="0" step="0.01" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Coste material (€)</label>
+            <input type="number" min="0" step="0.01" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.material_cost || 0}
               onChange={e => setForm(f => ({ ...f, material_cost: Number(e.target.value) }))} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Coste mano de obra (€)</label>
-            <input type="number" min="0" step="0.01" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Coste mano de obra (€)</label>
+            <input type="number" min="0" step="0.01" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.labor_cost || 0}
               onChange={e => setForm(f => ({ ...f, labor_cost: Number(e.target.value) }))} />
           </div>
           <div className="col-span-full">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Descripción del trabajo *</label>
-            <textarea className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" rows={3}
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Descripción del trabajo *</label>
+            <textarea className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-slate-700 dark:text-white" rows={3}
               value={form.description || ''}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div className="col-span-full">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Materiales necesarios</label>
-            <input className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Materiales necesarios</label>
+            <input className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               placeholder="Lista de materiales..."
               value={form.materials_needed || ''}
               onChange={e => setForm(f => ({ ...f, materials_needed: e.target.value }))} />
@@ -276,9 +431,9 @@ export default function RepairsPage() {
           <div className="flex items-center gap-2">
             <input type="checkbox" id="blocked" checked={form.blocked_by_material || false}
               onChange={e => setForm(f => ({ ...f, blocked_by_material: e.target.checked }))} className="rounded" />
-            <label htmlFor="blocked" className="text-sm text-gray-700">Bloqueado por falta de material</label>
+            <label htmlFor="blocked" className="text-sm text-gray-700 dark:text-slate-300">Bloqueado por falta de material</label>
           </div>
-          <div className="col-span-full flex gap-2 pt-2 border-t border-gray-100">
+          <div className="col-span-full flex gap-2 pt-2 border-t border-gray-100 dark:border-slate-700">
             <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)} disabled={saving}>Cancelar</Button>
             <Button className="flex-1" onClick={handleSave} disabled={saving || !form.description?.trim()}>
               {saving ? 'Guardando...' : 'Guardar reparación'}
