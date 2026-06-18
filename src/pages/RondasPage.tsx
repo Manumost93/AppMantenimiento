@@ -331,36 +331,39 @@ function generatePDF(form: WizardForm) {
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const finalY = (doc as any).lastAutoTable.finalY + 5
+  const checksTableFinalY = (doc as any).lastAutoTable.finalY
 
-  // Pie: realizado por
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(0, 0, 0)
-  doc.text('REALIZADO POR:', 4, finalY)
-  doc.setFont('helvetica', 'normal')
-  doc.setFillColor(255, 255, 0); doc.rect(30, finalY - 4, 40, 5.5, 'F')
-  doc.text(form.nombre.toUpperCase(), 31, finalY)
-  doc.text(`Hora Inicio: ${form.hora_inicio}`, 80, finalY)
-  doc.text(`Hora Fin: ${form.hora_fin}`, 120, finalY)
+  // Fila pie: Realizado por + horas (tabla autoTable para evitar overflow)
+  autoTable(doc, {
+    startY: checksTableFinalY + 3,
+    head: [['REALIZADO POR', 'HORA INICIO', 'HORA FIN']],
+    body: [[form.nombre.toUpperCase(), form.hora_inicio, form.hora_fin]],
+    styles: { fontSize: 8, cellPadding: 1.5 },
+    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold' },
+    bodyStyles: { fillColor: [255, 255, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
+    columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 30 }, 2: { cellWidth: 30 } },
+    margin: { left: 4, right: 4 },
+  })
 
-  // Lecturas
-  const ly = finalY + 8
-  doc.setFont('helvetica', 'bold'); doc.text('DIA DEL MES:', 4, ly)
-  doc.setFillColor(255, 255, 0); doc.rect(25, ly - 4, 12, 5.5, 'F')
-  doc.setFont('helvetica', 'normal'); doc.text(String(form.dia_mes), 26, ly)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const footerFinalY = (doc as any).lastAutoTable.finalY
 
-  const readings = [
-    { label: 'Electricidad', val: form.electricidad },
-    { label: 'Agua PCI', val: form.agua_pci },
-    { label: 'Agua Comercial', val: form.agua_comercial },
-    { label: 'PCI Jockey', val: form.pci_jockey },
-    { label: 'Compresor', val: form.compresor },
-  ]
-  let rx = 42
-  readings.forEach(({ label, val }) => {
-    doc.setFont('helvetica', 'bold'); doc.text(`${label}:`, rx, ly)
-    doc.setFillColor(255, 255, 0); doc.rect(rx + doc.getTextWidth(`${label}:`) + 1, ly - 4, 22, 5.5, 'F')
-    doc.setFont('helvetica', 'normal'); doc.text(val || '—', rx + doc.getTextWidth(`${label}:`) + 2, ly)
-    rx += 50
+  // Fila lecturas (tabla autoTable — garantiza que no desborda el ancho de página)
+  autoTable(doc, {
+    startY: footerFinalY + 1,
+    head: [['DÍA MES', 'ELECTRICIDAD (kWh)', 'AGUA PCI (m³)', 'AGUA COMERCIAL (m³)', 'PCI JOCKEY (arr.)', 'COMPRESOR (arr.)']],
+    body: [[
+      String(form.dia_mes),
+      form.electricidad || '—',
+      form.agua_pci || '—',
+      form.agua_comercial || '—',
+      form.pci_jockey || '—',
+      form.compresor || '—',
+    ]],
+    styles: { fontSize: 8, cellPadding: 1.5, halign: 'center' },
+    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { fillColor: [255, 255, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
+    margin: { left: 4, right: 4 },
   })
 
   doc.save(`ronda-${form.tipo}-${form.fecha}.pdf`)
@@ -430,8 +433,11 @@ export default function RondasPage() {
         }),
       })
       const withWorker = { ...saved, worker: workers.find(w => w.id === saved.worker_id) }
-      setRondas(prev => [withWorker, ...prev])
-      alert('Ronda guardada correctamente.')
+      // Dedup: si ya existe una ronda con el mismo id (upsert actualizó una existente), reemplázala; si no, prepénde
+      setRondas(prev => {
+        const exists = prev.some(r => r.id === saved.id)
+        return exists ? prev.map(r => r.id === saved.id ? withWorker : r) : [withWorker, ...prev]
+      })
       setWizardOn(false)
     } catch {
       alert('Error al guardar la ronda.')
@@ -571,6 +577,7 @@ export default function RondasPage() {
             </h2>
           </div>
           <CameraCapture
+            key={lec.key}
             label={lec.label}
             desc={lec.desc}
             unit={lec.unit}
@@ -881,7 +888,7 @@ export default function RondasPage() {
             <table className="w-full text-xs min-w-[600px]">
               <thead className="bg-gray-50 dark:bg-slate-700">
                 <tr>
-                  {['Fecha', 'Hora', 'Tipo', 'Responsable', 'Electricidad', 'Agua Com.', 'Jockey', 'Compresor', ''].map(h => (
+                  {['Fecha', 'Hora', 'Tipo', 'Responsable', 'Electricidad', 'Agua Com.', 'Jockey', 'Compresor', 'Acciones'].map(h => (
                     <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
