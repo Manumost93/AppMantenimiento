@@ -276,94 +276,164 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
 
 // ─── PDF Generator ────────────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CellDef = any
+
 function generatePDF(form: WizardForm) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const pw = doc.internal.pageSize.getWidth()
+  const pw = doc.internal.pageSize.getWidth()   // 297 mm
+  const MARGIN = 4
 
-  // Cabecera negra
-  doc.setFillColor(0, 0, 0); doc.rect(0, 0, pw, 14, 'F')
-  doc.setTextColor(255, 255, 0); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
-  doc.text('IKEA', 5, 6); doc.text('ALCORCÓN', 5, 10.5)
-  doc.setFontSize(13); doc.text('FICHA DIARIA MANTENIMIENTO PREVENTIVO', pw / 2, 9, { align: 'center' })
-  doc.setFontSize(14); doc.text(form.dia_semana.toUpperCase(), pw - 4, 9, { align: 'right' })
-  doc.setFontSize(9); doc.text(`S. ${form.semana_mes}`, pw - 4, 13.5, { align: 'right' })
+  // ── Cabecera ────────────────────────────────────────────────────────────────
+  // Fondo negro
+  doc.setFillColor(0, 0, 0)
+  doc.rect(0, 0, pw, 15, 'F')
 
-  // Título ronda
-  doc.setTextColor(0, 0, 0); doc.setFontSize(11)
-  doc.text(`RONDA DE ${form.tipo === 'apertura' ? 'APERTURA' : 'CIERRE'}`, pw / 2, 21, { align: 'center' })
+  // Caja blanca IKEA (izquierda)
+  doc.setFillColor(255, 255, 255)
+  doc.rect(0, 0, 32, 15, 'F')
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(0, 0, 0)
+  doc.text('IKEA', 3, 10)
+  doc.setFontSize(7); doc.text('ALCORCÓN', 3, 14)
 
-  // Tabla de checks
-  const body = form.checks.map(c => [
-    c.ubicacion, c.descripcion,
-    c.estado === 'bien' ? 'BIEN' : '',
-    c.estado === 'mal' ? 'MAL' : '',
-    c.comentario,
-  ])
+  // Título central (blanco sobre negro)
+  doc.setTextColor(255, 255, 255); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
+  doc.text('FICHA DIARIA MANTENIMIENTO PREVENTIVO', pw / 2, 9, { align: 'center' })
+
+  // Caja amarilla con día y semana (derecha)
+  const dayW = 42
+  doc.setFillColor(255, 255, 0)
+  doc.rect(pw - dayW, 0, dayW, 15, 'F')
+  doc.setTextColor(0, 0, 0)
+  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(14)
+  doc.text(form.dia_semana.toUpperCase(), pw - 2, 8, { align: 'right' })
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+  doc.text('S.', pw - dayW + 2, 13.5)
+  doc.setFontSize(13)
+  doc.text(String(form.semana_mes), pw - 2, 13.5, { align: 'right' })
+
+  // ── Subtítulo ronda ──────────────────────────────────────────────────────────
+  doc.setFillColor(230, 230, 230)
+  doc.rect(0, 15, pw, 7, 'F')
+  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(12); doc.setTextColor(0, 0, 0)
+  doc.text(
+    `RONDA DE ${form.tipo === 'apertura' ? 'APERTURA' : 'CIERRE'}`,
+    pw / 2, 20.5, { align: 'center' }
+  )
+
+  // ── Tabla de checks con rowspan por ubicación ────────────────────────────────
+  // Agrupar por ubicación para hacer rowspan visual
+  const groups: Record<string, CheckItem[]> = {}
+  form.checks.forEach(c => {
+    if (!groups[c.ubicacion]) groups[c.ubicacion] = []
+    groups[c.ubicacion].push(c)
+  })
+
+  const tableBody: CellDef[][] = []
+  Object.entries(groups).forEach(([ubicacion, items]) => {
+    items.forEach((c, i) => {
+      const row: CellDef[] = []
+      if (i === 0) {
+        row.push({
+          content: ubicacion,
+          rowSpan: items.length,
+          styles: { fontStyle: 'bold', valign: 'middle', halign: 'center', fontSize: 7 },
+        })
+      }
+      row.push({ content: c.descripcion })
+      // BIEN: verde si bien, blanco si mal
+      row.push({
+        content: 'BIEN',
+        styles: c.estado === 'bien'
+          ? { fillColor: [21, 128, 61], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' }
+          : { fillColor: [255, 255, 255], textColor: [0, 0, 0], halign: 'center' },
+      })
+      // MAL: rojo si mal, blanco si bien
+      row.push({
+        content: 'MAL',
+        styles: c.estado === 'mal'
+          ? { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' }
+          : { fillColor: [255, 255, 255], textColor: [0, 0, 0], halign: 'center' },
+      })
+      // Comentario: amarillo si hay texto
+      row.push({
+        content: c.comentario,
+        styles: c.comentario
+          ? { fillColor: [255, 255, 0], textColor: [0, 0, 0] }
+          : {},
+      })
+      tableBody.push(row)
+    })
+  })
 
   autoTable(doc, {
-    startY: 24,
-    head: [['UBICACIÓN', 'DESCRIPCIÓN', 'BIEN', 'MAL', 'COMENTARIOS']],
-    body,
-    styles: { fontSize: 7, cellPadding: 1.2 },
+    startY: 23,
+    head: [
+      [
+        { content: 'UBICACIÓN', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
+        { content: 'DESCRIPCIÓN', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
+        { content: 'CHECK', colSpan: 2, styles: { halign: 'center' } },
+        { content: 'COMENTARIOS', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
+      ],
+      ['BIEN', 'MAL'],
+    ],
+    body: tableBody,
+    styles: { fontSize: 7, cellPadding: 1.2, lineColor: [180, 180, 180], lineWidth: 0.1 },
     headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
     columnStyles: {
-      0: { cellWidth: 38, fontStyle: 'bold' },
-      1: { cellWidth: 65 },
-      2: { cellWidth: 14, halign: 'center' },
-      3: { cellWidth: 14, halign: 'center' },
+      0: { cellWidth: 32 },
+      1: { cellWidth: 63 },
+      2: { cellWidth: 14 },
+      3: { cellWidth: 14 },
       4: { cellWidth: 'auto' },
     },
-    didParseCell: ({ row, column, cell }) => {
-      if (row.section !== 'body') return
-      const ch = form.checks[row.index]
-      if (!ch) return
-      if (column.index === 2 && ch.estado === 'bien') {
-        cell.styles.fillColor = [21, 128, 61]; cell.styles.textColor = [255, 255, 255]; cell.styles.fontStyle = 'bold'
-      }
-      if (column.index === 3 && ch.estado === 'mal') {
-        cell.styles.fillColor = [220, 38, 38]; cell.styles.textColor = [255, 255, 255]; cell.styles.fontStyle = 'bold'
-      }
-      if (column.index === 4 && ch.comentario) {
-        cell.styles.fillColor = [255, 255, 0]; cell.styles.textColor = [0, 0, 0]
-      }
-    },
-    margin: { left: 4, right: 4 },
+    margin: { left: MARGIN, right: MARGIN },
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const checksTableFinalY = (doc as any).lastAutoTable.finalY
+  const checksY = (doc as any).lastAutoTable.finalY
 
-  // Fila pie: Realizado por + horas (tabla autoTable para evitar overflow)
+  // ── Fila REALIZADO POR ───────────────────────────────────────────────────────
   autoTable(doc, {
-    startY: checksTableFinalY + 3,
-    head: [['REALIZADO POR', 'HORA INICIO', 'HORA FIN']],
-    body: [[form.nombre.toUpperCase(), form.hora_inicio, form.hora_fin]],
-    styles: { fontSize: 8, cellPadding: 1.5 },
-    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold' },
-    bodyStyles: { fillColor: [255, 255, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
-    columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 30 }, 2: { cellWidth: 30 } },
-    margin: { left: 4, right: 4 },
-  })
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const footerFinalY = (doc as any).lastAutoTable.finalY
-
-  // Fila lecturas (tabla autoTable — garantiza que no desborda el ancho de página)
-  autoTable(doc, {
-    startY: footerFinalY + 1,
-    head: [['DÍA MES', 'ELECTRICIDAD (kWh)', 'AGUA PCI (m³)', 'AGUA COMERCIAL (m³)', 'PCI JOCKEY (arr.)', 'COMPRESOR (arr.)']],
+    startY: checksY + 1,
     body: [[
-      String(form.dia_mes),
-      form.electricidad || '—',
-      form.agua_pci || '—',
-      form.agua_comercial || '—',
-      form.pci_jockey || '—',
-      form.compresor || '—',
+      { content: 'REALIZADO POR:', styles: { fontStyle: 'bold', fillColor: [255, 255, 255] } },
+      { content: form.nombre.toUpperCase(), styles: { fillColor: [255, 255, 0], fontStyle: 'bold', textColor: [0, 0, 0] } },
+      { content: 'Hora Inicio:', styles: { fontStyle: 'bold', halign: 'right', fillColor: [255, 255, 255] } },
+      { content: form.hora_inicio, styles: { fillColor: [255, 255, 0], fontStyle: 'bold', halign: 'center' } },
+      { content: 'Hora Fin:', styles: { fontStyle: 'bold', halign: 'right', fillColor: [255, 255, 255] } },
+      { content: form.hora_fin, styles: { fillColor: [255, 255, 0], fontStyle: 'bold', halign: 'center' } },
     ]],
-    styles: { fontSize: 8, cellPadding: 1.5, halign: 'center' },
-    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
-    bodyStyles: { fillColor: [255, 255, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
-    margin: { left: 4, right: 4 },
+    styles: { fontSize: 8, cellPadding: 1.5, lineColor: [180, 180, 180], lineWidth: 0.1 },
+    columnStyles: {
+      0: { cellWidth: 30 },
+      1: { cellWidth: 50 },
+      2: { cellWidth: 24 },
+      3: { cellWidth: 18 },
+      4: { cellWidth: 18 },
+      5: { cellWidth: 18 },
+    },
+    margin: { left: MARGIN, right: MARGIN },
+  })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const realizadoY = (doc as any).lastAutoTable.finalY
+
+  // ── Fila DIA DEL MES + lecturas ──────────────────────────────────────────────
+  autoTable(doc, {
+    startY: realizadoY + 0.5,
+    head: [['DIA DEL MES', 'Electricidad', 'AGUA PCI', 'AGUA COMERCIAL', 'PCI JOCKEY', 'COMPRESOR']],
+    body: [[
+      { content: String(form.dia_mes), styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
+      { content: form.electricidad || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
+      { content: form.agua_pci || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
+      { content: form.agua_comercial || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
+      { content: form.pci_jockey || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
+      { content: form.compresor || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
+    ]],
+    styles: { fontSize: 8, cellPadding: 1.5, halign: 'center', lineColor: [180, 180, 180], lineWidth: 0.1 },
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.3 },
+    margin: { left: MARGIN, right: MARGIN },
   })
 
   doc.save(`ronda-${form.tipo}-${form.fecha}.pdf`)
