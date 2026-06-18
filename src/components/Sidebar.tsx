@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   Calendar, LayoutDashboard, User, Users, Truck, FolderOpen,
   Building2, Paintbrush2, UtensilsCrossed, Wrench,
-  BarChart2, Settings, ChevronRight, Shield, ClipboardCheck, ShieldAlert
+  BarChart2, Settings, ChevronRight, Shield, ClipboardCheck, ShieldAlert, BookOpen
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -17,6 +17,7 @@ const navItems = [
   { path: '/kone',      icon: Building2,          label: 'KONE / Ascensores',  section: 'areas',  adminOnly: false },
   { path: '/comin-ion', icon: Paintbrush2,        label: 'COMIN / ION',        section: 'areas',  adminOnly: false },
   { path: '/food',      icon: UtensilsCrossed,    label: 'FOOD / Restaurante', section: 'areas',  adminOnly: false },
+  { path: '/meetings',  icon: BookOpen,           label: 'Reuniones',          section: 'work',   adminOnly: false },
   { path: '/team',      icon: Users,              label: 'Equipo',             section: 'manage', adminOnly: false },
   { path: '/providers', icon: Truck,              label: 'Proveedores/Contactos', section: 'manage', adminOnly: false },
   { path: '/documents', icon: FolderOpen,         label: 'Documentos',         section: 'manage', adminOnly: false },

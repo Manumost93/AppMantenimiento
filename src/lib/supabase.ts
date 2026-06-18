@@ -3,7 +3,7 @@ import type {
   TeamMember, Provider, Area, Task, KoneIncident,
   CominIonJob, FoodIncident, GeneralRepair,
   PersonalNote, MaterialRequest, Document,
-  WorkerTaskStats, RondaEntry, SecurityIncident,
+  WorkerTaskStats, RondaEntry, SecurityIncident, Meeting,
 } from '@/types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
@@ -624,6 +624,42 @@ export async function deleteSecurityIncident(id: number): Promise<void> {
 
 export async function resetAllWorkerPins(): Promise<void> {
   const { error } = await supabase.from('workers').update({ pin_hash: '' })
+  if (error) throw error
+}
+
+// ─── Reuniones ───────────────────────────────────────────────────────────────
+
+export async function getMeetings(department?: string): Promise<Meeting[]> {
+  let query = supabase
+    .from('meetings')
+    .select('*, created_by:workers!created_by_id(id,name,color)')
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (department) query = query.eq('department', department)
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []).map(m => ({
+    ...m,
+    agenda: Array.isArray(m.agenda) ? m.agenda : [],
+    created_by: m.created_by ?? undefined,
+  }))
+}
+
+export async function upsertMeeting(meeting: Partial<Meeting>): Promise<Meeting> {
+  const payload: Record<string, unknown> = { ...meeting }
+  delete payload.created_by
+  if (!payload.id) delete payload.id
+  const { data, error } = await supabase
+    .from('meetings')
+    .upsert(payload)
+    .select()
+    .single()
+  if (error) throw error
+  return { ...data, agenda: Array.isArray(data.agenda) ? data.agenda : [] }
+}
+
+export async function deleteMeeting(id: number): Promise<void> {
+  const { error } = await supabase.from('meetings').delete().eq('id', id)
   if (error) throw error
 }
 

@@ -265,6 +265,32 @@ export interface SecurityIncident {
   created_at: string
 }
 
+// ─── Reuniones ───────────────────────────────────────────────────────────────
+
+export type MeetingDepartment = 'general' | 'kone' | 'comin' | 'food' | 'security' | 'repairs'
+
+export interface MeetingPoint {
+  id: string
+  title: string
+  notes?: string
+  done: boolean
+  responsible_id?: number
+}
+
+export interface Meeting {
+  id: number
+  title: string
+  date: string
+  time?: string
+  department: MeetingDepartment
+  participants?: string
+  agenda: MeetingPoint[]
+  notes?: string
+  created_by_id?: number
+  created_by?: TeamMember
+  created_at: string
+}
+
 // ─── Rondas de apertura/cierre ───────────────────────────────────────────────
 
 export type TipoRonda = 'apertura' | 'cierre'

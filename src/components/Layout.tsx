@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import BottomNav from './BottomNav'
 import { processSyncQueue, getPendingSyncCount } from '@/lib/db'
 import { useLocation } from 'react-router-dom'
 
@@ -53,10 +54,12 @@ export default function Layout({ children }: { children: ReactNode }) {
           pendingSync={pendingSync}
           onMenuClick={() => setSidebarOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto pb-16 lg:pb-0">
           {children}
         </main>
       </div>
+
+      <BottomNav onMenuClick={() => setSidebarOpen(true)} />
     </div>
   )
 }
