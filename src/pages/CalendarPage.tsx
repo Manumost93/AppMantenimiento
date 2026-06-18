@@ -122,9 +122,9 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <Filter size={14} className="text-gray-400 shrink-0" />
-          <span className="text-xs text-gray-500">Filtrar:</span>
+          <span className="text-xs text-gray-500 dark:text-slate-400">Filtrar:</span>
           <select
-            className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="text-xs border border-gray-200 dark:border-slate-600 rounded-md px-2 py-1 bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-400"
             value={filterMember || ''}
             onChange={e => setFilterMember(e.target.value ? Number(e.target.value) : undefined)}
           >
@@ -158,7 +158,7 @@ export default function CalendarPage() {
       </div>
 
       {/* Calendario */}
-      <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
           initialView="dayGridMonth"
@@ -184,7 +184,7 @@ export default function CalendarPage() {
       <Dialog open={showDialog} onClose={() => setShowDialog(false)} title={form.id ? 'Editar tarea' : 'Nueva tarea compartida'}>
         <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Título *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Título *</label>
             <input className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
               placeholder="Describe la tarea..."
               value={form.title || ''}
@@ -192,13 +192,13 @@ export default function CalendarPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Fecha *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Fecha *</label>
               <input type="date" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={form.date || ''}
                 onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Responsable</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Responsable</label>
               <select className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={form.responsible_id || ''}
                 onChange={e => setForm(f => ({ ...f, responsible_id: e.target.value ? Number(e.target.value) : undefined }))}>
@@ -209,13 +209,13 @@ export default function CalendarPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Hora inicio</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Hora inicio</label>
               <input type="time" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={form.start_time || ''}
                 onChange={e => setForm(f => ({ ...f, start_time: e.target.value || undefined }))} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Hora fin</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Hora fin</label>
               <input type="time" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={form.end_time || ''}
                 onChange={e => setForm(f => ({ ...f, end_time: e.target.value || undefined }))} />
@@ -223,7 +223,7 @@ export default function CalendarPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Prioridad</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Prioridad</label>
               <select className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={form.priority || 'medium'}
                 onChange={e => setForm(f => ({ ...f, priority: e.target.value as Task['priority'] }))}>
@@ -234,7 +234,7 @@ export default function CalendarPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Estado</label>
               <select className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={form.status || 'pending'}
                 onChange={e => setForm(f => ({ ...f, status: e.target.value as Task['status'] }))}>
@@ -247,7 +247,7 @@ export default function CalendarPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Sección</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Sección</label>
             <select className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
               value={form.area_id || ''}
               onChange={e => setForm(f => ({ ...f, area_id: e.target.value ? Number(e.target.value) : undefined }))}>
@@ -256,7 +256,7 @@ export default function CalendarPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Descripción / Notas</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Descripción / Notas</label>
             <textarea className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
               rows={3}
               value={form.notes || ''}
@@ -277,13 +277,13 @@ export default function CalendarPage() {
         <Dialog open={showDetail} onClose={() => setShowDetail(false)} title={selectedTask.title}>
           <div className="p-5 space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500 text-xs">Fecha</span><p className="font-medium">{selectedTask.date}</p></div>
-              {selectedTask.start_time && <div><span className="text-gray-500 text-xs">Hora</span><p className="font-medium">{selectedTask.start_time}{selectedTask.end_time ? ` - ${selectedTask.end_time}` : ''}</p></div>}
-              <div><span className="text-gray-500 text-xs">Estado</span><p className="font-medium capitalize">{selectedTask.status}</p></div>
-              <div><span className="text-gray-500 text-xs">Prioridad</span><p className="font-medium capitalize">{selectedTask.priority}</p></div>
-              {selectedTask.responsible && <div><span className="text-gray-500 text-xs">Responsable</span><p className="font-medium">{selectedTask.responsible.name}</p></div>}
+              <div><span className="text-gray-500 dark:text-slate-400 text-xs">Fecha</span><p className="font-medium dark:text-slate-200">{selectedTask.date}</p></div>
+              {selectedTask.start_time && <div><span className="text-gray-500 dark:text-slate-400 text-xs">Hora</span><p className="font-medium dark:text-slate-200">{selectedTask.start_time}{selectedTask.end_time ? ` - ${selectedTask.end_time}` : ''}</p></div>}
+              <div><span className="text-gray-500 dark:text-slate-400 text-xs">Estado</span><p className="font-medium capitalize dark:text-slate-200">{selectedTask.status}</p></div>
+              <div><span className="text-gray-500 dark:text-slate-400 text-xs">Prioridad</span><p className="font-medium capitalize dark:text-slate-200">{selectedTask.priority}</p></div>
+              {selectedTask.responsible && <div><span className="text-gray-500 dark:text-slate-400 text-xs">Responsable</span><p className="font-medium dark:text-slate-200">{selectedTask.responsible.name}</p></div>}
             </div>
-            {selectedTask.notes && <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{selectedTask.notes}</p>}
+            {selectedTask.notes && <p className="text-sm text-gray-600 dark:text-slate-300 bg-gray-50 dark:bg-slate-700 rounded-lg p-3">{selectedTask.notes}</p>}
             <div className="flex gap-2 pt-2">
               <Button variant="outline" className="flex-1" onClick={() => editTask(selectedTask)}>Editar</Button>
               <button onClick={() => handleDelete(selectedTask)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-md hover:bg-red-50">

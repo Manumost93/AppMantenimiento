@@ -71,4 +71,80 @@
   .dark .divide-gray-100 > * + * {
     border-color: rgb(51 65 85);
   }
+
+  /* ─── Dark mode: contenedores blancos genéricos ──────────────────────── */
+  .dark .bg-white {
+    background-color: rgb(30 41 59);
+  }
+  .dark .border-gray-200 {
+    border-color: rgb(51 65 85) !important;
+  }
+  .dark .border-gray-100 {
+    border-color: rgb(51 65 85) !important;
+  }
+  .dark .border-gray-300 {
+    border-color: rgb(71 85 105) !important;
+  }
+
+  /* ─── Dark mode: texto genérico ─────────────────────────────────────── */
+  .dark .text-gray-900 { color: rgb(248 250 252); }
+  .dark .text-gray-800 { color: rgb(226 232 240); }
+  .dark .text-gray-700 { color: rgb(203 213 225); }
+  .dark .text-gray-600 { color: rgb(148 163 184); }
+  .dark .text-gray-500 { color: rgb(100 116 139); }
+
+  /* ─── Dark mode: fondos grises genéricos ────────────────────────────── */
+  .dark .bg-gray-50  { background-color: rgb(15 23 42);  }
+  .dark .bg-gray-100 { background-color: rgb(30 41 59);  }
+
+  /* ─── Dark mode: tablas ──────────────────────────────────────────────── */
+  .dark thead { background-color: rgb(51 65 85) !important; }
+  .dark thead th {
+    color: rgb(203 213 225) !important;
+    border-color: rgb(71 85 105) !important;
+  }
+  .dark tbody tr { border-color: rgb(51 65 85) !important; }
+  .dark tbody tr:hover { background-color: rgb(51 65 85) !important; }
+  .dark tbody td { color: rgb(226 232 240) !important; }
+
+  /* ─── Dark mode: FullCalendar ────────────────────────────────────────── */
+  .dark .fc { color: rgb(226 232 240); }
+  .dark .fc .fc-toolbar-title { color: rgb(248 250 252); font-weight: 600; }
+  .dark .fc .fc-button {
+    background-color: rgb(51 65 85) !important;
+    border-color: rgb(71 85 105) !important;
+    color: rgb(226 232 240) !important;
+  }
+  .dark .fc .fc-button:hover {
+    background-color: rgb(71 85 105) !important;
+    border-color: rgb(100 116 139) !important;
+  }
+  .dark .fc .fc-button-active,
+  .dark .fc .fc-button:not(:disabled):active {
+    background-color: rgb(37 99 235) !important;
+    border-color: rgb(29 78 216) !important;
+    color: #fff !important;
+  }
+  .dark .fc .fc-scrollgrid          { border-color: rgb(51 65 85) !important; }
+  .dark .fc td, .dark .fc th        { border-color: rgb(51 65 85) !important; }
+  .dark .fc .fc-view-harness,
+  .dark .fc .fc-daygrid-body,
+  .dark .fc .fc-scrollgrid-sync-table { background-color: rgb(30 41 59); }
+  .dark .fc .fc-col-header-cell      { background-color: rgb(15 23 42); }
+  .dark .fc .fc-col-header-cell-cushion { color: rgb(148 163 184); text-decoration: none !important; }
+  .dark .fc .fc-daygrid-day-number   { color: rgb(203 213 225); text-decoration: none !important; }
+  .dark .fc .fc-day-other .fc-daygrid-day-number { color: rgb(71 85 105); }
+  .dark .fc .fc-daygrid-day.fc-day-today { background-color: rgba(37, 99, 235, 0.15) !important; }
+  .dark .fc .fc-daygrid-day:hover .fc-daygrid-day-frame { background-color: rgb(51 65 85); }
+  .dark .fc .fc-timegrid-slot        { border-color: rgb(51 65 85) !important; }
+  .dark .fc .fc-timegrid-slot-label-cushion { color: rgb(100 116 139); }
+  .dark .fc .fc-timegrid-col         { background-color: rgb(30 41 59); }
+  .dark .fc .fc-list-day-cushion     { background-color: rgb(15 23 42) !important; color: rgb(148 163 184); }
+  .dark .fc .fc-list-table td        { border-color: rgb(51 65 85) !important; }
+  .dark .fc .fc-list-event           { background-color: rgb(30 41 59); }
+  .dark .fc .fc-list-event:hover td  { background-color: rgb(51 65 85) !important; }
+  .dark .fc .fc-list-empty           { background-color: rgb(15 23 42); color: rgb(100 116 139); }
+  .dark .fc .fc-more-link            { color: rgb(96 165 250) !important; }
+  .dark .fc .fc-daygrid-more-link    { color: rgb(96 165 250) !important; }
+  .dark .fc .fc-now-indicator-line   { border-color: rgb(239 68 68) !important; }
 }
