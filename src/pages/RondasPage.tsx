@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react'
-import { ClipboardCheck, Plus, Trash2, FileDown, Sun, Moon, Zap, Droplets, AlertCircle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ClipboardCheck, Sun, Moon, ArrowLeft, ArrowRight, Check, Camera, FileDown, Pencil, History, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Dialog } from '@/components/ui/dialog'
 import { getRondas, upsertRonda, deleteRonda, getWorkers } from '@/lib/supabase'
 import type { RondaEntry, TeamMember, TipoRonda } from '@/types'
 import { cn, todayIso, getInitials } from '@/lib/utils'
@@ -10,393 +8,844 @@ import { useAuth } from '@/contexts/AuthContext'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
-// ─── SQL para crear la tabla en Supabase ──────────────────────────────────────
-// CREATE TABLE IF NOT EXISTS rondas (
-//   id BIGSERIAL PRIMARY KEY,
-//   fecha DATE NOT NULL,
-//   hora TIME NOT NULL,
-//   tipo TEXT NOT NULL CHECK (tipo IN ('apertura', 'cierre')),
-//   worker_id BIGINT REFERENCES workers(id),
-//   lectura_luz NUMERIC(12,2),
-//   lectura_agua NUMERIC(12,2),
-//   arranques_jockey INTEGER DEFAULT 0,
-//   arranques_compresor INTEGER DEFAULT 0,
-//   temperatura NUMERIC(5,1),
-//   observaciones TEXT,
-//   created_at TIMESTAMPTZ DEFAULT NOW()
-// );
+// ─── SQL para añadir columnas nuevas en Supabase (ejecutar una vez) ───────────
+// ALTER TABLE rondas
+//   ADD COLUMN IF NOT EXISTS lectura_agua_pci NUMERIC(12,2),
+//   ADD COLUMN IF NOT EXISTS dia_semana TEXT,
+//   ADD COLUMN IF NOT EXISTS dia_mes INTEGER,
+//   ADD COLUMN IF NOT EXISTS semana_mes INTEGER,
+//   ADD COLUMN IF NOT EXISTS hora_fin TIME,
+//   ADD COLUMN IF NOT EXISTS checks JSONB DEFAULT '[]'::jsonb,
+//   ADD COLUMN IF NOT EXISTS nombre_libre TEXT;
 
-function getCurrentTime() {
-  const now = new Date()
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface CheckItem {
+  ubicacion: string
+  descripcion: string
+  estado: 'bien' | 'mal'
+  comentario: string
 }
 
-function formatHora(h: string) {
-  return h ? h.substring(0, 5) : '—'
+interface WizardForm {
+  tipo: 'apertura' | 'cierre'
+  nombre: string
+  hora_inicio: string
+  hora_fin: string
+  dia_semana: string
+  dia_mes: number
+  semana_mes: number
+  electricidad: string
+  agua_pci: string
+  agua_comercial: string
+  pci_jockey: string
+  compresor: string
+  checks: CheckItem[]
+  fecha: string
 }
 
-const TIPO_CONFIG = {
-  apertura: { label: 'Apertura', icon: Sun, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-200 dark:border-amber-800' },
-  cierre:   { label: 'Cierre',   icon: Moon, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800' },
+type WizardStep = 'tipo' | 'datos' | 'lecturas' | 'formulario'
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+const LECTURAS_CONFIG: { key: keyof WizardForm; label: string; desc: string; unit: string; color: string }[] = [
+  { key: 'agua_comercial', label: 'Agua Comercial', desc: 'Fotografia el contador de AGUA COMERCIAL', unit: 'm³', color: 'bg-blue-500' },
+  { key: 'agua_pci', label: 'Agua PCI', desc: 'Fotografía el contador de AGUA PCI', unit: 'm³', color: 'bg-cyan-500' },
+  { key: 'electricidad', label: 'Electricidad', desc: 'Fotografía el contador de ELECTRICIDAD', unit: 'kWh', color: 'bg-yellow-500' },
+  { key: 'compresor', label: 'Compresor', desc: 'Fotografía el contador de ARRANQUES COMPRESOR', unit: 'arr.', color: 'bg-orange-500' },
+  { key: 'pci_jockey', label: 'PCI Jockey', desc: 'Fotografía el contador de ARRANQUES PCI JOCKEY', unit: 'arr.', color: 'bg-red-500' },
+]
+
+const DEFAULT_CHECKS: CheckItem[] = [
+  { ubicacion: 'SAI 1', descripcion: 'Estado equipo', estado: 'bien', comentario: '' },
+  { ubicacion: 'SAI 1', descripcion: 'Tensión de entrada', estado: 'bien', comentario: '' },
+  { ubicacion: 'SAI 1', descripcion: 'Climatización sala', estado: 'bien', comentario: '22' },
+  { ubicacion: 'SAI 2', descripcion: 'Estado equipo', estado: 'bien', comentario: '' },
+  { ubicacion: 'SAI 2', descripcion: 'Tensión de entrada', estado: 'bien', comentario: '' },
+  { ubicacion: 'SAI 2', descripcion: 'Climatización sala', estado: 'bien', comentario: '22' },
+  { ubicacion: 'COMPUTER ROOM', descripcion: 'Estado equipo', estado: 'bien', comentario: '' },
+  { ubicacion: 'COMPUTER ROOM', descripcion: 'Climatización sala', estado: 'bien', comentario: '21-22' },
+  { ubicacion: 'C.G.B.T', descripcion: 'Protecciones disparadas', estado: 'bien', comentario: '' },
+  { ubicacion: 'C.G.B.T', descripcion: 'Funcionamiento Extractor', estado: 'bien', comentario: '' },
+  { ubicacion: 'C.G.B.T', descripcion: 'Baterías de Condensadores', estado: 'bien', comentario: '' },
+  { ubicacion: 'BMS', descripcion: 'Comunicación autómatas', estado: 'mal', comentario: 'FILTRO 1-2-3' },
+  { ubicacion: 'BMS', descripcion: 'Revisar alarmas', estado: 'mal', comentario: 'RESETEO ALARMAS' },
+  { ubicacion: 'SALA GRUPO ELECTROGENO', descripcion: 'Estado equipo', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA GRUPO ELECTROGENO', descripcion: 'Equipo en stand by', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA GRUPO ELECTROGENO', descripcion: 'Nivel combustible', estado: 'bien', comentario: '100%' },
+  { ubicacion: 'SALA GRUPO ELECTROGENO', descripcion: 'Resistencia de caldeo', estado: 'bien', comentario: '' },
+  { ubicacion: 'FV', descripcion: 'Estado Alarmas', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA CALDERAS', descripcion: 'Estado Equipos', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA CALDERAS', descripcion: 'Presión de gas', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA CALDERAS', descripcion: 'Fugas de agua', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA BOMBAS FRIO', descripcion: 'Estado Equipos', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA BOMBAS FRIO', descripcion: 'Fugas de agua', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA BOMBAS FRIO', descripcion: 'Enfriadoras', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA ACS', descripcion: 'Estado Equipos', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA ACS', descripcion: 'Fugas de agua', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA ACS', descripcion: 'Presión de gas', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA ACS', descripcion: 'Temperatura depósito ACS', estado: 'bien', comentario: '27-32' },
+  { ubicacion: 'MUELLE EXTERIOR', descripcion: 'Estado contenedores', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA AFS', descripcion: 'Estado Equipos', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA AFS', descripcion: 'Presión de agua de entrada', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA AFS', descripcion: 'Fugas de agua', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA AFS', descripcion: 'Sal descalcificador', estado: 'bien', comentario: 'no hay' },
+  { ubicacion: 'SALA PCI', descripcion: 'Estado equipos', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA PCI', descripcion: 'Bombas en automático', estado: 'bien', comentario: '' },
+  { ubicacion: 'SALA PCI', descripcion: 'Nivel combustible diesel', estado: 'bien', comentario: '100%' },
+  { ubicacion: 'SALA PCI', descripcion: 'Nº arranques Jockey', estado: 'bien', comentario: '13' },
+]
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function now() {
+  const d = new Date()
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+function addHour(t: string) {
+  const [h, m] = t.split(':').map(Number)
+  return `${String((h + 1) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+function weekOfMonth() { return Math.ceil(new Date().getDate() / 7) }
+function dayOfWeek() {
+  const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+  return days[new Date().getDay()]
+}
+function emptyForm(): WizardForm {
+  const h = now()
+  return {
+    tipo: 'apertura', nombre: '', fecha: todayIso(),
+    hora_inicio: h, hora_fin: addHour(h),
+    dia_semana: dayOfWeek(), dia_mes: new Date().getDate(), semana_mes: weekOfMonth(),
+    electricidad: '', agua_pci: '', agua_comercial: '', pci_jockey: '', compresor: '',
+    checks: DEFAULT_CHECKS.map(c => ({ ...c })),
+  }
 }
 
-function Counter({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+// ─── Camera capture ───────────────────────────────────────────────────────────
+
+function CameraCapture({ label, desc, unit, value, onChange }: {
+  label: string; desc: string; unit: string; value: string; onChange: (v: string) => void
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [stream, setStream] = useState<MediaStream | null>(null)
+  const [camOn, setCamOn] = useState(false)
+  const [photo, setPhoto] = useState<string | null>(null)
+  const [err, setErr] = useState('')
+
+  async function openCam() {
+    setErr('')
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      setStream(s)
+      if (videoRef.current) { videoRef.current.srcObject = s; await videoRef.current.play() }
+      setCamOn(true)
+    } catch { setErr('Cámara no disponible. Introduce el valor manualmente.') }
+  }
+
+  function shoot() {
+    if (!videoRef.current || !canvasRef.current) return
+    const ctx = canvasRef.current.getContext('2d')
+    if (!ctx) return
+    canvasRef.current.width = videoRef.current.videoWidth
+    canvasRef.current.height = videoRef.current.videoHeight
+    ctx.drawImage(videoRef.current, 0, 0)
+    setPhoto(canvasRef.current.toDataURL('image/jpeg', 0.7))
+    stream?.getTracks().forEach(t => t.stop())
+    setStream(null); setCamOn(false)
+  }
+
+  useEffect(() => () => { stream?.getTracks().forEach(t => t.stop()) }, [stream])
+
   return (
-    <div>
-      <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">{label}</label>
-      <div className="flex items-center gap-2">
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500 dark:text-slate-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2 border border-blue-100 dark:border-blue-800">
+        {desc}
+      </p>
+      {camOn ? (
+        <div className="relative rounded-xl overflow-hidden bg-black">
+          <video ref={videoRef} autoPlay playsInline className="w-full max-h-64 object-cover" />
+          <button
+            onClick={shoot}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full bg-white border-4 border-gray-300 shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
+          >
+            <Camera size={24} className="text-gray-700" />
+          </button>
+        </div>
+      ) : photo ? (
+        <div className="relative rounded-xl overflow-hidden">
+          <img src={photo} className="w-full max-h-48 object-contain bg-black rounded-xl" alt="Foto contador" />
+          <button
+            onClick={() => { setPhoto(null); openCam() }}
+            className="absolute top-2 right-2 bg-black/60 text-white text-xs px-3 py-1 rounded-full hover:bg-black/80"
+          >Repetir</button>
+        </div>
+      ) : (
         <button
-          type="button"
-          onClick={() => onChange(Math.max(0, value - 1))}
-          className="w-7 h-7 rounded-md border border-gray-200 dark:border-slate-600 flex items-center justify-center text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 font-bold text-lg leading-none"
-        >−</button>
+          onClick={openCam}
+          className="w-full h-32 border-2 border-dashed border-gray-200 dark:border-slate-600 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-slate-500 hover:border-blue-400 hover:text-blue-400 dark:hover:border-blue-500 dark:hover:text-blue-400 transition-colors"
+        >
+          <Camera size={28} />
+          <span className="text-sm font-medium">Toca para fotografiar el contador</span>
+          <span className="text-xs">o introduce el valor manualmente abajo</span>
+        </button>
+      )}
+      <canvas ref={canvasRef} className="hidden" />
+      {err && <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">{err}</p>}
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-2">
+          Valor leído — {label} ({unit})
+        </label>
         <input
-          type="number"
-          min="0"
-          className="w-16 text-center text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
+          type="number" step="1" min="0"
+          placeholder="Introduce el número del contador..."
+          className="w-full text-xl font-mono text-center border-2 border-gray-200 dark:border-slate-500 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
           value={value}
-          onChange={e => onChange(Math.max(0, Number(e.target.value)))}
+          onChange={e => onChange(e.target.value)}
         />
-        <button
-          type="button"
-          onClick={() => onChange(value + 1)}
-          className="w-7 h-7 rounded-md border border-gray-200 dark:border-slate-600 flex items-center justify-center text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 font-bold text-lg leading-none"
-        >+</button>
       </div>
     </div>
   )
 }
 
+// ─── PDF Generator ────────────────────────────────────────────────────────────
+
+function generatePDF(form: WizardForm) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  const pw = doc.internal.pageSize.getWidth()
+
+  // Cabecera negra
+  doc.setFillColor(0, 0, 0); doc.rect(0, 0, pw, 14, 'F')
+  doc.setTextColor(255, 255, 0); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+  doc.text('IKEA', 5, 6); doc.text('ALCORCÓN', 5, 10.5)
+  doc.setFontSize(13); doc.text('FICHA DIARIA MANTENIMIENTO PREVENTIVO', pw / 2, 9, { align: 'center' })
+  doc.setFontSize(14); doc.text(form.dia_semana.toUpperCase(), pw - 4, 9, { align: 'right' })
+  doc.setFontSize(9); doc.text(`S. ${form.semana_mes}`, pw - 4, 13.5, { align: 'right' })
+
+  // Título ronda
+  doc.setTextColor(0, 0, 0); doc.setFontSize(11)
+  doc.text(`RONDA DE ${form.tipo === 'apertura' ? 'APERTURA' : 'CIERRE'}`, pw / 2, 21, { align: 'center' })
+
+  // Tabla de checks
+  const body = form.checks.map(c => [
+    c.ubicacion, c.descripcion,
+    c.estado === 'bien' ? 'BIEN' : '',
+    c.estado === 'mal' ? 'MAL' : '',
+    c.comentario,
+  ])
+
+  autoTable(doc, {
+    startY: 24,
+    head: [['UBICACIÓN', 'DESCRIPCIÓN', 'BIEN', 'MAL', 'COMENTARIOS']],
+    body,
+    styles: { fontSize: 7, cellPadding: 1.2 },
+    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+    columnStyles: {
+      0: { cellWidth: 38, fontStyle: 'bold' },
+      1: { cellWidth: 65 },
+      2: { cellWidth: 14, halign: 'center' },
+      3: { cellWidth: 14, halign: 'center' },
+      4: { cellWidth: 'auto' },
+    },
+    didParseCell: ({ row, column, cell }) => {
+      if (row.section !== 'body') return
+      const ch = form.checks[row.index]
+      if (!ch) return
+      if (column.index === 2 && ch.estado === 'bien') {
+        cell.styles.fillColor = [21, 128, 61]; cell.styles.textColor = [255, 255, 255]; cell.styles.fontStyle = 'bold'
+      }
+      if (column.index === 3 && ch.estado === 'mal') {
+        cell.styles.fillColor = [220, 38, 38]; cell.styles.textColor = [255, 255, 255]; cell.styles.fontStyle = 'bold'
+      }
+      if (column.index === 4 && ch.comentario) {
+        cell.styles.fillColor = [255, 255, 0]; cell.styles.textColor = [0, 0, 0]
+      }
+    },
+    margin: { left: 4, right: 4 },
+  })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const finalY = (doc as any).lastAutoTable.finalY + 5
+
+  // Pie: realizado por
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(0, 0, 0)
+  doc.text('REALIZADO POR:', 4, finalY)
+  doc.setFont('helvetica', 'normal')
+  doc.setFillColor(255, 255, 0); doc.rect(30, finalY - 4, 40, 5.5, 'F')
+  doc.text(form.nombre.toUpperCase(), 31, finalY)
+  doc.text(`Hora Inicio: ${form.hora_inicio}`, 80, finalY)
+  doc.text(`Hora Fin: ${form.hora_fin}`, 120, finalY)
+
+  // Lecturas
+  const ly = finalY + 8
+  doc.setFont('helvetica', 'bold'); doc.text('DIA DEL MES:', 4, ly)
+  doc.setFillColor(255, 255, 0); doc.rect(25, ly - 4, 12, 5.5, 'F')
+  doc.setFont('helvetica', 'normal'); doc.text(String(form.dia_mes), 26, ly)
+
+  const readings = [
+    { label: 'Electricidad', val: form.electricidad },
+    { label: 'Agua PCI', val: form.agua_pci },
+    { label: 'Agua Comercial', val: form.agua_comercial },
+    { label: 'PCI Jockey', val: form.pci_jockey },
+    { label: 'Compresor', val: form.compresor },
+  ]
+  let rx = 42
+  readings.forEach(({ label, val }) => {
+    doc.setFont('helvetica', 'bold'); doc.text(`${label}:`, rx, ly)
+    doc.setFillColor(255, 255, 0); doc.rect(rx + doc.getTextWidth(`${label}:`) + 1, ly - 4, 22, 5.5, 'F')
+    doc.setFont('helvetica', 'normal'); doc.text(val || '—', rx + doc.getTextWidth(`${label}:`) + 2, ly)
+    rx += 50
+  })
+
+  doc.save(`ronda-${form.tipo}-${form.fecha}.pdf`)
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+const TIPO_CFG = {
+  apertura: { label: 'Apertura', Icon: Sun, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-200 dark:border-amber-800', btn: 'bg-amber-500 hover:bg-amber-600' },
+  cierre: { label: 'Cierre', Icon: Moon, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800', btn: 'bg-indigo-600 hover:bg-indigo-700' },
+}
+
 export default function RondasPage() {
   const { worker } = useAuth()
+
+  // Wizard state
+  const [wizardOn, setWizardOn] = useState(false)
+  const [step, setStep] = useState<WizardStep>('tipo')
+  const [lecturaIdx, setLecturaIdx] = useState(0)
+  const [wForm, setWForm] = useState<WizardForm>(emptyForm)
+  const [saving, setSaving] = useState(false)
+
+  // List state
   const [rondas, setRondas] = useState<RondaEntry[]>([])
   const [workers, setWorkers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
-  const [showDialog, setShowDialog] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [selectedFecha, setSelectedFecha] = useState(todayIso())
-  const [dbError, setDbError] = useState(false)
-
-  const [form, setForm] = useState<Partial<RondaEntry>>({
-    fecha: todayIso(),
-    hora: getCurrentTime(),
-    tipo: 'apertura',
-    worker_id: worker?.id,
-    lectura_luz: undefined,
-    lectura_agua: undefined,
-    arranques_jockey: 0,
-    arranques_compresor: 0,
-    temperatura: undefined,
-    observaciones: '',
-  })
+  const [showHistory, setShowHistory] = useState(false)
 
   useEffect(() => {
     Promise.all([getRondas(), getWorkers()])
       .then(([r, w]) => { setRondas(r); setWorkers(w) })
-      .catch(() => setDbError(true))
       .finally(() => setLoading(false))
   }, [])
 
-  async function reloadForDate(fecha: string) {
-    setSelectedFecha(fecha)
-    getRondas(fecha).then(setRondas).catch(() => setDbError(true))
+  function startWizard() {
+    const f = emptyForm()
+    f.nombre = worker?.name || ''
+    setWForm(f)
+    setStep('tipo')
+    setLecturaIdx(0)
+    setWizardOn(true)
   }
 
-  function openCreate(tipo: TipoRonda) {
-    setForm({
-      fecha: selectedFecha,
-      hora: getCurrentTime(),
-      tipo,
-      worker_id: worker?.id,
-      lectura_luz: undefined,
-      lectura_agua: undefined,
-      arranques_jockey: 0,
-      arranques_compresor: 0,
-      temperatura: undefined,
-      observaciones: '',
-    })
-    setShowDialog(true)
+  function setCheck(i: number, field: 'estado' | 'comentario', val: string) {
+    setWForm(f => ({
+      ...f,
+      checks: f.checks.map((c, idx) => idx === i ? { ...c, [field]: val } : c),
+    }))
   }
 
   async function handleSave() {
-    if (!form.fecha || !form.hora || !form.tipo) return
     setSaving(true)
     try {
-      const saved = await upsertRonda(form)
+      const saved = await upsertRonda({
+        fecha: wForm.fecha,
+        hora: wForm.hora_inicio,
+        tipo: wForm.tipo as TipoRonda,
+        worker_id: workers.find(w => w.name === wForm.nombre)?.id || worker?.id,
+        lectura_luz: wForm.electricidad ? Number(wForm.electricidad) : undefined,
+        lectura_agua: wForm.agua_comercial ? Number(wForm.agua_comercial) : undefined,
+        arranques_jockey: wForm.pci_jockey ? Number(wForm.pci_jockey) : undefined,
+        arranques_compresor: wForm.compresor ? Number(wForm.compresor) : undefined,
+        observaciones: JSON.stringify({
+          dia_semana: wForm.dia_semana, dia_mes: wForm.dia_mes, semana_mes: wForm.semana_mes,
+          hora_fin: wForm.hora_fin, agua_pci: wForm.agua_pci, nombre: wForm.nombre,
+          checks: wForm.checks,
+        }),
+      })
       const withWorker = { ...saved, worker: workers.find(w => w.id === saved.worker_id) }
-      setRondas(prev => [withWorker, ...prev.filter(r => r.id !== saved.id)])
-      setShowDialog(false)
+      setRondas(prev => [withWorker, ...prev])
+      alert('Ronda guardada correctamente.')
+      setWizardOn(false)
     } catch {
-      alert('Error al guardar. Asegúrate de haber creado la tabla "rondas" en Supabase (ver comentario en supabase.ts).')
-    } finally {
-      setSaving(false)
-    }
+      alert('Error al guardar la ronda.')
+    } finally { setSaving(false) }
   }
 
   async function handleDelete(id: number) {
     if (!confirm('¿Eliminar esta ronda?')) return
-    try {
-      await deleteRonda(id)
-      setRondas(prev => prev.filter(r => r.id !== id))
-    } catch {
-      alert('No se pudo eliminar.')
+    try { await deleteRonda(id); setRondas(prev => prev.filter(r => r.id !== id)) }
+    catch { alert('No se pudo eliminar.') }
+  }
+
+  // ── Wizard rendering ────────────────────────────────────────────────────────
+
+  function renderStep() {
+    // Step 1: Tipo
+    if (step === 'tipo') return (
+      <div className="flex flex-col items-center gap-6 py-8">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white">¿Qué ronda vas a realizar?</h2>
+        <div className="grid grid-cols-1 gap-4 w-full max-w-sm">
+          {(['apertura', 'cierre'] as const).map(tipo => {
+            const cfg = TIPO_CFG[tipo]
+            return (
+              <button
+                key={tipo}
+                onClick={() => { setWForm(f => ({ ...f, tipo })); setStep('datos') }}
+                className={cn(
+                  'flex items-center gap-4 p-6 rounded-2xl border-2 transition-all hover:scale-105 active:scale-100',
+                  cfg.bg, cfg.border,
+                )}
+              >
+                <cfg.Icon size={40} className={cfg.color} />
+                <div className="text-left">
+                  <p className="text-lg font-bold text-gray-800 dark:text-white">Ronda de {cfg.label}</p>
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    {tipo === 'apertura' ? 'Inicio de jornada — apertura de instalaciones' : 'Fin de jornada — cierre de instalaciones'}
+                  </p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+
+    // Step 2: Datos
+    if (step === 'datos') return (
+      <div className="space-y-4 py-4">
+        <h2 className="text-base font-bold text-gray-800 dark:text-white">Datos de la ronda</h2>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1">¿Quién realiza la ronda?</label>
+          <select
+            className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
+            value={wForm.nombre}
+            onChange={e => setWForm(f => ({ ...f, nombre: e.target.value }))}
+          >
+            <option value="">Selecciona...</option>
+            {workers.filter(w => w.active).map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1">Hora de inicio</label>
+            <input type="time"
+              className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
+              value={wForm.hora_inicio}
+              onChange={e => setWForm(f => ({ ...f, hora_inicio: e.target.value, hora_fin: addHour(e.target.value) }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1">Hora de fin (auto +1h)</label>
+            <input type="time"
+              className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
+              value={wForm.hora_fin}
+              onChange={e => setWForm(f => ({ ...f, hora_fin: e.target.value }))} />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1">Día de la semana</label>
+          <div className="grid grid-cols-4 gap-2">
+            {DIAS.map(d => (
+              <button key={d} onClick={() => setWForm(f => ({ ...f, dia_semana: d }))}
+                className={cn('py-2 text-xs rounded-xl font-medium border transition-colors',
+                  wForm.dia_semana === d
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-blue-400'
+                )}>
+                {d.slice(0, 3)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1">Día del mes</label>
+            <input type="number" min={1} max={31}
+              className="w-full text-center text-lg font-mono border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
+              value={wForm.dia_mes}
+              onChange={e => setWForm(f => ({ ...f, dia_mes: Number(e.target.value) }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1">Semana del mes (S.)</label>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map(s => (
+                <button key={s} onClick={() => setWForm(f => ({ ...f, semana_mes: s }))}
+                  className={cn('flex-1 py-2.5 text-sm rounded-xl font-bold border transition-colors',
+                    wForm.semana_mes === s
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-blue-400'
+                  )}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+
+    // Step 3: Lecturas (cámara)
+    if (step === 'lecturas') {
+      const lec = LECTURAS_CONFIG[lecturaIdx]
+      const isLast = lecturaIdx === LECTURAS_CONFIG.length - 1
+      return (
+        <div className="space-y-4 py-4">
+          {/* Progreso */}
+          <div className="flex items-center gap-2">
+            {LECTURAS_CONFIG.map((l, i) => (
+              <div key={l.key} className={cn(
+                'flex-1 h-1.5 rounded-full transition-colors',
+                i < lecturaIdx ? 'bg-blue-500' : i === lecturaIdx ? 'bg-blue-300' : 'bg-gray-200 dark:bg-slate-600'
+              )} />
+            ))}
+          </div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-gray-800 dark:text-white">
+              Lectura {lecturaIdx + 1} de {LECTURAS_CONFIG.length}: <span className="text-blue-600 dark:text-blue-400">{lec.label}</span>
+            </h2>
+          </div>
+          <CameraCapture
+            label={lec.label}
+            desc={lec.desc}
+            unit={lec.unit}
+            value={String(wForm[lec.key] ?? '')}
+            onChange={v => setWForm(f => ({ ...f, [lec.key]: v }))}
+          />
+          <div className="flex gap-3 pt-2">
+            {lecturaIdx > 0 && (
+              <button onClick={() => setLecturaIdx(i => i - 1)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-600 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700">
+                <ArrowLeft size={15} /> Anterior
+              </button>
+            )}
+            <button
+              onClick={() => isLast ? setStep('formulario') : setLecturaIdx(i => i + 1)}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+            >
+              {isLast ? (<><Check size={15} /> Ver formulario completo</>) : (<>Siguiente: {LECTURAS_CONFIG[lecturaIdx + 1].label} <ArrowRight size={15} /></>)}
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    // Step 4: Formulario Excel
+    if (step === 'formulario') {
+      // Agrupar checks por ubicacion
+      const groups: Record<string, { item: CheckItem; idx: number }[]> = {}
+      wForm.checks.forEach((c, idx) => {
+        if (!groups[c.ubicacion]) groups[c.ubicacion] = []
+        groups[c.ubicacion].push({ item: c, idx })
+      })
+
+      return (
+        <div className="space-y-3 py-2">
+          {/* Header estilo Excel */}
+          <div className="bg-black text-white rounded-t-xl">
+            <div className="grid grid-cols-3 items-center p-2 gap-2">
+              <div>
+                <p className="text-yellow-300 font-bold text-xs leading-tight">IKEA</p>
+                <p className="text-yellow-300 text-[10px]">ALCORCÓN</p>
+              </div>
+              <p className="text-center text-xs font-bold">FICHA DIARIA MANTENIMIENTO PREVENTIVO</p>
+              <div className="text-right">
+                <p className="text-yellow-300 font-bold text-sm">{wForm.dia_semana.toUpperCase()}</p>
+                <p className="text-yellow-300 text-xs">S. {wForm.semana_mes}</p>
+              </div>
+            </div>
+            <div className={cn('text-center py-1.5 font-bold text-sm tracking-widest italic', wForm.tipo === 'apertura' ? 'bg-blue-900' : 'bg-purple-900')}>
+              RONDA DE {wForm.tipo === 'apertura' ? 'APERTURA' : 'CIERRE'}
+            </div>
+          </div>
+
+          {/* Tabla de checks */}
+          <div className="overflow-x-auto rounded-b-xl border border-gray-200 dark:border-slate-700">
+            <table className="w-full text-xs min-w-[500px]">
+              <thead>
+                <tr className="bg-black text-white">
+                  <th className="py-2 px-2 text-left font-bold w-28">UBICACIÓN</th>
+                  <th className="py-2 px-2 text-left font-bold">DESCRIPCIÓN</th>
+                  <th className="py-2 px-2 text-center font-bold w-16">CHECK</th>
+                  <th className="py-2 px-2 text-left font-bold">COMENTARIOS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(groups).map(([ubicacion, items]) =>
+                  items.map(({ item, idx }, i) => (
+                    <tr key={idx} className="border-t border-gray-100 dark:border-slate-700">
+                      {i === 0 && (
+                        <td
+                          rowSpan={items.length}
+                          className="px-2 py-1 font-bold text-[10px] align-middle border-r border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800/50 text-gray-700 dark:text-slate-300"
+                        >
+                          {ubicacion}
+                        </td>
+                      )}
+                      <td className="px-2 py-1.5 text-gray-700 dark:text-slate-300">{item.descripcion}</td>
+                      <td className="px-2 py-1 text-center">
+                        <button
+                          onClick={() => setCheck(idx, 'estado', item.estado === 'bien' ? 'mal' : 'bien')}
+                          className={cn(
+                            'px-2 py-0.5 rounded text-[10px] font-bold w-full transition-colors',
+                            item.estado === 'bien'
+                              ? 'bg-green-600 text-white hover:bg-red-600'
+                              : 'bg-red-600 text-white hover:bg-green-600'
+                          )}
+                        >
+                          {item.estado === 'bien' ? 'BIEN' : 'MAL'}
+                        </button>
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          type="text"
+                          className={cn(
+                            'w-full text-xs px-1.5 py-0.5 rounded border focus:outline-none focus:ring-1 focus:ring-blue-400',
+                            item.comentario
+                              ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700 text-gray-800 dark:text-yellow-100 font-semibold'
+                              : 'bg-transparent border-transparent dark:text-slate-300 hover:border-gray-200 dark:hover:border-slate-600'
+                          )}
+                          value={item.comentario}
+                          onChange={e => setCheck(idx, 'comentario', e.target.value)}
+                          placeholder="—"
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pie con lecturas */}
+          <div className="bg-gray-50 dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-3 space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <span className="text-xs font-bold text-gray-600 dark:text-slate-400">REALIZADO POR: </span>
+                <span className="text-xs font-bold text-yellow-700 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30 px-2 py-0.5 rounded">{wForm.nombre || '—'}</span>
+              </div>
+              <div className="flex gap-4 text-xs text-gray-600 dark:text-slate-400">
+                <span>Hora inicio: <strong className="dark:text-white">{wForm.hora_inicio}</strong></span>
+                <span>Hora fin: <strong className="dark:text-white">{wForm.hora_fin}</strong></span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap text-xs">
+              <span className="font-bold text-gray-600 dark:text-slate-400">DÍA: <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 rounded">{wForm.dia_mes}</span></span>
+              {[
+                { label: 'Electricidad', val: wForm.electricidad },
+                { label: 'Agua PCI', val: wForm.agua_pci },
+                { label: 'Agua Comercial', val: wForm.agua_comercial },
+                { label: 'PCI Jockey', val: wForm.pci_jockey },
+                { label: 'Compresor', val: wForm.compresor },
+              ].map(({ label, val }) => (
+                <span key={label} className="text-gray-500 dark:text-slate-400">
+                  {label}: <strong className="text-gray-800 dark:text-slate-100 font-mono">{val || '—'}</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Botones finales */}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <button
+              onClick={() => generatePDF(wForm)}
+              className="flex items-center justify-center gap-2 py-3 text-sm font-semibold text-blue-600 dark:text-blue-400 border-2 border-blue-300 dark:border-blue-700 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+            >
+              <FileDown size={16} /> Descargar PDF
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center justify-center gap-2 py-3 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 rounded-xl transition-colors"
+            >
+              <Check size={16} /> {saving ? 'Guardando...' : 'Guardar ronda'}
+            </button>
+          </div>
+        </div>
+      )
     }
   }
 
-  function exportPdf() {
-    const doc = new jsPDF()
-    doc.setFontSize(14)
-    doc.text('Rondas de Apertura y Cierre', 14, 18)
-    doc.setFontSize(10)
-    doc.text(`Fecha: ${selectedFecha}`, 14, 26)
-    doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 14, 32)
+  // ── Wizard overlay ──────────────────────────────────────────────────────────
 
-    const rows = rondas.map(r => [
-      r.fecha,
-      formatHora(r.hora),
-      TIPO_CONFIG[r.tipo].label,
-      r.worker?.name || '—',
-      r.lectura_luz != null ? `${r.lectura_luz} kWh` : '—',
-      r.lectura_agua != null ? `${r.lectura_agua} m³` : '—',
-      String(r.arranques_jockey ?? 0),
-      String(r.arranques_compresor ?? 0),
-      r.temperatura != null ? `${r.temperatura} °C` : '—',
-      r.observaciones || '—',
-    ])
+  if (wizardOn) {
+    const steps: WizardStep[] = ['tipo', 'datos', 'lecturas', 'formulario']
+    const stepIdx = steps.indexOf(step)
+    const stepLabels = ['Tipo', 'Datos', 'Lecturas', 'Formulario']
 
-    autoTable(doc, {
-      startY: 38,
-      head: [['Fecha', 'Hora', 'Tipo', 'Responsable', 'Luz', 'Agua', 'Jockey', 'Compresor', 'Temp.', 'Obs.']],
-      body: rows,
-      styles: { fontSize: 7 },
-      headStyles: { fillColor: [30, 64, 175] },
-    })
+    return (
+      <div className="fixed inset-0 z-50 bg-white dark:bg-slate-900 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-slate-700 shrink-0">
+          <button
+            onClick={() => {
+              if (step === 'tipo') { setWizardOn(false) }
+              else if (step === 'datos') setStep('tipo')
+              else if (step === 'lecturas' && lecturaIdx > 0) setLecturaIdx(i => i - 1)
+              else if (step === 'lecturas') setStep('datos')
+              else if (step === 'formulario') setStep('lecturas')
+            }}
+            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-white"
+          >
+            <ArrowLeft size={16} /> Atrás
+          </button>
+          <div className="flex items-center gap-1.5">
+            {stepLabels.map((l, i) => (
+              <div key={l} className="flex items-center gap-1">
+                <div className={cn(
+                  'w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center',
+                  i < stepIdx ? 'bg-blue-600 text-white' : i === stepIdx ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 ring-1 ring-blue-400' : 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-slate-500'
+                )}>{i + 1}</div>
+                {i < stepLabels.length - 1 && <div className={cn('w-5 h-px', i < stepIdx ? 'bg-blue-400' : 'bg-gray-200 dark:bg-slate-600')} />}
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setWizardOn(false)} className="text-xs text-gray-400 dark:text-slate-500 hover:text-red-500">Cancelar</button>
+        </div>
 
-    doc.save(`rondas-${selectedFecha}.pdf`)
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-4 pb-6">
+          {renderStep()}
+        </div>
+
+        {/* Bottom nav (only for datos step) */}
+        {step === 'datos' && (
+          <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-700 shrink-0">
+            <button
+              onClick={() => setStep('lecturas')}
+              disabled={!wForm.nombre}
+              className="w-full py-3 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              Continuar con lecturas <ArrowRight size={15} />
+            </button>
+          </div>
+        )}
+      </div>
+    )
   }
 
-  const rondasFecha = rondas.filter(r => r.fecha === selectedFecha)
-  const apertura = rondasFecha.filter(r => r.tipo === 'apertura')
-  const cierre   = rondasFecha.filter(r => r.tipo === 'cierre')
+  // ── Normal page view ────────────────────────────────────────────────────────
+
+  const today = rondas.filter(r => r.fecha === todayIso())
+  const apertura = today.filter(r => r.tipo === 'apertura')[0]
+  const cierre = today.filter(r => r.tipo === 'cierre')[0]
 
   return (
     <div className="p-5 space-y-5">
-      {/* Cabecera */}
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <ClipboardCheck size={20} className="text-blue-600" />
           <div>
             <h2 className="text-base font-bold text-gray-900 dark:text-white">Rondas de apertura y cierre</h2>
-            <p className="text-xs text-gray-500 dark:text-slate-400">Lecturas diarias de contadores e instalaciones</p>
+            <p className="text-xs text-gray-500 dark:text-slate-400">Ficha diaria de mantenimiento preventivo</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={exportPdf} disabled={rondas.length === 0}>
-            <FileDown size={13} /> Exportar PDF
-          </Button>
-        </div>
+        <Button onClick={startWizard} className="bg-blue-600 hover:bg-blue-700 gap-2">
+          <Plus size={14} /> Nueva ronda
+        </Button>
       </div>
 
-      {/* Aviso si la tabla no existe */}
-      {dbError && (
-        <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-          <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-700 dark:text-amber-300">
-            <p className="font-semibold mb-1">La tabla "rondas" aún no existe en Supabase.</p>
-            <p className="text-xs">Ejecuta el SQL que aparece como comentario en <code>src/lib/supabase.ts</code> en el editor SQL de tu proyecto Supabase para crearla.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Selector de fecha + botones */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div>
-          <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Fecha de la ronda</label>
-          <input
-            type="date"
-            className="text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-            value={selectedFecha}
-            onChange={e => reloadForDate(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-2 mt-4">
-          <Button size="sm" onClick={() => openCreate('apertura')} className="bg-amber-500 hover:bg-amber-600">
-            <Sun size={13} /> Registrar apertura
-          </Button>
-          <Button size="sm" onClick={() => openCreate('cierre')} className="bg-indigo-600 hover:bg-indigo-700">
-            <Moon size={13} /> Registrar cierre
-          </Button>
-        </div>
-      </div>
-
-      {/* Cards resumen del día */}
+      {/* Estado del día */}
       {loading ? (
-        <div className="text-center py-12 text-gray-400 dark:text-slate-500">Cargando rondas...</div>
+        <div className="text-center py-12 text-gray-400 dark:text-slate-500">Cargando...</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(['apertura', 'cierre'] as TipoRonda[]).map(tipo => {
-            const cfg = TIPO_CONFIG[tipo]
-            const Icon = cfg.icon
-            const list = tipo === 'apertura' ? apertura : cierre
-            const last = list[0]
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {(['apertura', 'cierre'] as const).map(tipo => {
+            const cfg = TIPO_CFG[tipo]
+            const r = tipo === 'apertura' ? apertura : cierre
             return (
-              <Card key={tipo} className={cn('border-2', cfg.border)}>
-                <CardContent className="pt-4">
-                  <div className={cn('flex items-center gap-2 mb-4 pb-3 border-b', tipo === 'apertura' ? 'border-amber-100 dark:border-amber-900/30' : 'border-indigo-100 dark:border-indigo-900/30')}>
-                    <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', cfg.bg)}>
-                      <Icon size={18} className={cfg.color} />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-800 dark:text-white">Ronda de {cfg.label}</h3>
-                      <p className="text-xs text-gray-400 dark:text-slate-500">{list.length} registro{list.length !== 1 ? 's' : ''} hoy</p>
-                    </div>
-                    <button
-                      onClick={() => openCreate(tipo)}
-                      className={cn('ml-auto flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors',
-                        tipo === 'apertura'
-                          ? 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50'
-                          : 'text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50'
-                      )}
-                    >
-                      <Plus size={11} /> Añadir
-                    </button>
+              <div key={tipo} className={cn('rounded-2xl border-2 p-4', cfg.border, cfg.bg)}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', cfg.bg)}>
+                    <cfg.Icon size={22} className={cfg.color} />
                   </div>
-
-                  {!last ? (
-                    <div className="text-center py-6 text-gray-300 dark:text-slate-600">
-                      <p className="text-sm">Sin registro para hoy</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {/* Último registro */}
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          {last.worker && (
-                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
-                              style={{ backgroundColor: last.worker.color }}>
-                              {getInitials(last.worker.name)}
-                            </div>
-                          )}
-                          <span className="text-xs text-gray-600 dark:text-slate-300 font-medium">
-                            {last.worker?.name || 'Sin asignar'} — {formatHora(last.hora)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {last.lectura_luz != null && (
-                          <div className="flex items-center gap-1.5 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg px-3 py-2">
-                            <Zap size={13} className="text-yellow-500 shrink-0" />
-                            <div>
-                              <p className="text-[10px] text-gray-500 dark:text-slate-400">Luz</p>
-                              <p className="text-sm font-bold text-gray-800 dark:text-white">{last.lectura_luz} kWh</p>
-                            </div>
-                          </div>
-                        )}
-                        {last.lectura_agua != null && (
-                          <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
-                            <Droplets size={13} className="text-blue-500 shrink-0" />
-                            <div>
-                              <p className="text-[10px] text-gray-500 dark:text-slate-400">Agua</p>
-                              <p className="text-sm font-bold text-gray-800 dark:text-white">{last.lectura_agua} m³</p>
-                            </div>
-                          </div>
-                        )}
-                        {last.arranques_jockey != null && (
-                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg px-3 py-2">
-                            <p className="text-[10px] text-gray-500 dark:text-slate-400">Arranques jockey</p>
-                            <p className="text-sm font-bold text-gray-800 dark:text-white">{last.arranques_jockey}</p>
-                          </div>
-                        )}
-                        {last.arranques_compresor != null && (
-                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg px-3 py-2">
-                            <p className="text-[10px] text-gray-500 dark:text-slate-400">Arranques compresor</p>
-                            <p className="text-sm font-bold text-gray-800 dark:text-white">{last.arranques_compresor}</p>
-                          </div>
-                        )}
-                        {last.temperatura != null && (
-                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg px-3 py-2">
-                            <p className="text-[10px] text-gray-500 dark:text-slate-400">Temperatura</p>
-                            <p className="text-sm font-bold text-gray-800 dark:text-white">{last.temperatura} °C</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {last.observaciones && (
-                        <p className="text-xs text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-slate-700 rounded-lg px-3 py-2 mt-2">
-                          {last.observaciones}
-                        </p>
-                      )}
-                    </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-800 dark:text-white">Ronda de {cfg.label}</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      {r ? `Realizada a las ${r.hora?.substring(0, 5)}` : 'Sin registrar hoy'}
+                    </p>
+                  </div>
+                  {r && (
+                    <span className="ml-auto flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-full">
+                      <Check size={11} /> Hecho
+                    </span>
                   )}
-
-                  {/* Historial del día */}
-                  {list.length > 1 && (
-                    <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-700 space-y-1">
-                      <p className="text-xs text-gray-400 dark:text-slate-500 mb-2">Registros anteriores de hoy</p>
-                      {list.slice(1).map(r => (
-                        <div key={r.id} className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400">
-                          <span>{formatHora(r.hora)} — {r.worker?.name || '—'}</span>
-                          <button onClick={() => handleDelete(r.id)} className="text-gray-300 dark:text-slate-600 hover:text-red-500 ml-2">
-                            <Trash2 size={11} />
-                          </button>
+                </div>
+                {r ? (
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {r.worker && (
+                      <div className="flex items-center gap-1.5 col-span-2">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ backgroundColor: r.worker.color }}>
+                          {getInitials(r.worker.name)}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                        <span className="text-gray-700 dark:text-slate-300 font-medium">{r.worker.name}</span>
+                      </div>
+                    )}
+                    {r.lectura_luz != null && <div className="bg-white/60 dark:bg-slate-700/50 rounded-lg px-2 py-1.5"><p className="text-gray-400 text-[10px]">Electricidad</p><p className="font-mono font-bold text-gray-800 dark:text-white">{r.lectura_luz}</p></div>}
+                    {r.lectura_agua != null && <div className="bg-white/60 dark:bg-slate-700/50 rounded-lg px-2 py-1.5"><p className="text-gray-400 text-[10px]">Agua Comercial</p><p className="font-mono font-bold text-gray-800 dark:text-white">{r.lectura_agua}</p></div>}
+                    {r.arranques_jockey != null && <div className="bg-white/60 dark:bg-slate-700/50 rounded-lg px-2 py-1.5"><p className="text-gray-400 text-[10px]">PCI Jockey</p><p className="font-mono font-bold text-gray-800 dark:text-white">{r.arranques_jockey}</p></div>}
+                    {r.arranques_compresor != null && <div className="bg-white/60 dark:bg-slate-700/50 rounded-lg px-2 py-1.5"><p className="text-gray-400 text-[10px]">Compresor</p><p className="font-mono font-bold text-gray-800 dark:text-white">{r.arranques_compresor}</p></div>}
+                  </div>
+                ) : (
+                  <button
+                    onClick={startWizard}
+                    className={cn('w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-colors', cfg.btn)}
+                  >
+                    + Registrar ahora
+                  </button>
+                )}
+              </div>
             )
           })}
         </div>
       )}
 
-      {/* Historial completo */}
-      {rondas.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200 mb-3">Historial de rondas</h3>
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden shadow-sm overflow-x-auto">
-            <table className="w-full text-sm min-w-[700px]">
-              <thead className="bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
+      {/* Historial */}
+      <div>
+        <button
+          onClick={() => setShowHistory(h => !h)}
+          className="flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white mb-3"
+        >
+          <History size={15} />
+          Historial de rondas ({rondas.length})
+          <span className="text-xs text-gray-400">{showHistory ? '▲' : '▼'}</span>
+        </button>
+        {showHistory && rondas.length > 0 && (
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden overflow-x-auto shadow-sm">
+            <table className="w-full text-xs min-w-[600px]">
+              <thead className="bg-gray-50 dark:bg-slate-700">
                 <tr>
-                  {['Fecha', 'Hora', 'Tipo', 'Responsable', 'Luz (kWh)', 'Agua (m³)', 'Jockey', 'Compresor', 'Temp.', ''].map(h => (
-                    <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  {['Fecha', 'Hora', 'Tipo', 'Responsable', 'Electricidad', 'Agua Com.', 'Jockey', 'Compresor', ''].map(h => (
+                    <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
                 {rondas.map(r => {
-                  const cfg = TIPO_CONFIG[r.tipo]
-                  const Icon = cfg.icon
+                  const cfg = TIPO_CFG[r.tipo]
                   return (
                     <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
-                      <td className="px-3 py-2.5 text-xs text-gray-600 dark:text-slate-300 whitespace-nowrap">{r.fecha}</td>
-                      <td className="px-3 py-2.5 text-xs text-gray-600 dark:text-slate-300 whitespace-nowrap">{formatHora(r.hora)}</td>
-                      <td className="px-3 py-2.5">
-                        <span className={cn('flex items-center gap-1 text-xs font-medium', cfg.color)}>
-                          <Icon size={11} /> {cfg.label}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2 text-gray-600 dark:text-slate-300">{r.fecha}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-slate-300">{r.hora?.substring(0, 5)}</td>
+                      <td className="px-3 py-2"><span className={cn('font-medium', cfg.color)}>{cfg.label}</span></td>
+                      <td className="px-3 py-2">
                         {r.worker ? (
                           <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
-                              style={{ backgroundColor: r.worker.color }}>
-                              {r.worker.name[0]}
-                            </div>
-                            <span className="text-xs text-gray-700 dark:text-slate-300">{r.worker.name.split(' ')[0]}</span>
+                            <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ backgroundColor: r.worker.color }}>{r.worker.name[0]}</div>
+                            <span className="text-gray-700 dark:text-slate-300">{r.worker.name.split(' ')[0]}</span>
                           </div>
-                        ) : <span className="text-xs text-gray-400 dark:text-slate-500">—</span>}
+                        ) : <span className="text-gray-400">—</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-gray-700 dark:text-slate-200 font-mono">{r.lectura_luz ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-xs text-gray-700 dark:text-slate-200 font-mono">{r.lectura_agua ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-xs text-gray-700 dark:text-slate-200 font-mono">{r.arranques_jockey ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-xs text-gray-700 dark:text-slate-200 font-mono">{r.arranques_compresor ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-xs text-gray-700 dark:text-slate-200 font-mono">{r.temperatura != null ? `${r.temperatura}°` : '—'}</td>
-                      <td className="px-3 py-2.5">
-                        <button onClick={() => handleDelete(r.id)} className="p-1 text-gray-300 dark:text-slate-600 hover:text-red-500 rounded">
-                          <Trash2 size={12} />
+                      <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.lectura_luz ?? '—'}</td>
+                      <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.lectura_agua ?? '—'}</td>
+                      <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.arranques_jockey ?? '—'}</td>
+                      <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.arranques_compresor ?? '—'}</td>
+                      <td className="px-3 py-2">
+                        <button onClick={() => handleDelete(r.id)} className="text-gray-300 dark:text-slate-600 hover:text-red-500 p-1 rounded">
+                          <Pencil size={11} />
                         </button>
                       </td>
                     </tr>
@@ -405,111 +854,8 @@ export default function RondasPage() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {/* Dialog nuevo registro */}
-      <Dialog open={showDialog} onClose={() => setShowDialog(false)} title={`Nueva ronda de ${form.tipo ? TIPO_CONFIG[form.tipo].label : ''}`} size="md">
-        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Fecha</label>
-              <input type="date" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
-                value={form.fecha || todayIso()}
-                onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Hora</label>
-              <input type="time" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
-                value={form.hora || ''}
-                onChange={e => setForm(f => ({ ...f, hora: e.target.value }))} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Tipo de ronda</label>
-              <select className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
-                value={form.tipo || 'apertura'}
-                onChange={e => setForm(f => ({ ...f, tipo: e.target.value as TipoRonda }))}>
-                <option value="apertura">Apertura</option>
-                <option value="cierre">Cierre</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Responsable</label>
-              <select className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
-                value={form.worker_id || ''}
-                onChange={e => setForm(f => ({ ...f, worker_id: e.target.value ? Number(e.target.value) : undefined }))}>
-                <option value="">Sin asignar</option>
-                {workers.filter(w => w.active).map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Lecturas de contadores */}
-          <div className="bg-gray-50 dark:bg-slate-700 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Lecturas de contadores</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                  <Zap size={11} className="text-yellow-500" /> Lectura luz (kWh)
-                </label>
-                <input type="number" step="0.01" min="0" placeholder="—"
-                  className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-600 dark:text-white"
-                  value={form.lectura_luz ?? ''}
-                  onChange={e => setForm(f => ({ ...f, lectura_luz: e.target.value ? Number(e.target.value) : undefined }))} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                  <Droplets size={11} className="text-blue-500" /> Lectura agua (m³)
-                </label>
-                <input type="number" step="0.01" min="0" placeholder="—"
-                  className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-600 dark:text-white"
-                  value={form.lectura_agua ?? ''}
-                  onChange={e => setForm(f => ({ ...f, lectura_agua: e.target.value ? Number(e.target.value) : undefined }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Counter
-                label="Arranques bomba jockey"
-                value={form.arranques_jockey ?? 0}
-                onChange={v => setForm(f => ({ ...f, arranques_jockey: v }))}
-              />
-              <Counter
-                label="Arranques compresor"
-                value={form.arranques_compresor ?? 0}
-                onChange={v => setForm(f => ({ ...f, arranques_compresor: v }))}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Temperatura (°C)</label>
-              <input type="number" step="0.1" placeholder="—"
-                className="w-40 text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-600 dark:text-white"
-                value={form.temperatura ?? ''}
-                onChange={e => setForm(f => ({ ...f, temperatura: e.target.value ? Number(e.target.value) : undefined }))} />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Observaciones</label>
-            <textarea
-              rows={3}
-              className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-slate-700 dark:text-white"
-              placeholder="Incidencias, anomalías, notas..."
-              value={form.observaciones || ''}
-              onChange={e => setForm(f => ({ ...f, observaciones: e.target.value }))}
-            />
-          </div>
-
-          <div className="flex gap-2 pt-1 border-t border-gray-100 dark:border-slate-700">
-            <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)} disabled={saving}>Cancelar</Button>
-            <Button className="flex-1" onClick={handleSave} disabled={saving}>
-              {saving ? 'Guardando...' : 'Guardar ronda'}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+        )}
+      </div>
     </div>
   )
 }
