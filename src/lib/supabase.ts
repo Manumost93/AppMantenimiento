@@ -3,7 +3,7 @@ import type {
   TeamMember, Provider, Area, Task, KoneIncident,
   CominIonJob, FoodIncident, GeneralRepair,
   PersonalNote, MaterialRequest, Document,
-  WorkerTaskStats, RondaEntry,
+  WorkerTaskStats, RondaEntry, SecurityIncident,
 } from '@/types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
@@ -588,7 +588,39 @@ export async function getDashboardStats(today: string) {
   }
 }
 
-// ─── Seguridad ────────────────────────────────────────────────────────────────
+// ─── Seguridad / Incidencias ─────────────────────────────────────────────────
+
+export async function getSecurityIncidents(): Promise<SecurityIncident[]> {
+  const { data, error } = await supabase
+    .from('security_incidents')
+    .select('*, internal_responsible:workers!internal_responsible_id(id,name,color)')
+    .order('date', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(s => ({
+    ...s,
+    internal_responsible: s.internal_responsible ?? undefined,
+  }))
+}
+
+export async function upsertSecurityIncident(incident: Partial<SecurityIncident>): Promise<SecurityIncident> {
+  const payload: Record<string, unknown> = { ...incident }
+  delete payload.internal_responsible
+  if (!payload.id) delete payload.id
+  const { data, error } = await supabase
+    .from('security_incidents')
+    .upsert(payload)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteSecurityIncident(id: number): Promise<void> {
+  const { error } = await supabase.from('security_incidents').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── Reset PINs ───────────────────────────────────────────────────────────────
 
 export async function resetAllWorkerPins(): Promise<void> {
   const { error } = await supabase.from('workers').update({ pin_hash: '' })

@@ -17,6 +17,7 @@ import ReportsPage from '@/pages/ReportsPage'
 import SettingsPage from '@/pages/SettingsPage'
 import MyAreaPage from '@/pages/MyAreaPage'
 import RondasPage from '@/pages/RondasPage'
+import SecurityPage from '@/pages/SecurityPage'
 
 function AppRoutes() {
   const { worker, isLoading } = useAuth()
@@ -41,6 +42,7 @@ function AppRoutes() {
           <Route path="/my-area" element={<MyAreaPage />} />
           <Route path="/repairs" element={<RepairsPage />} />
           <Route path="/rondas" element={<RondasPage />} />
+          <Route path="/security" element={<SecurityPage />} />
           <Route path="/kone" element={<KonePage />} />
           <Route path="/comin-ion" element={<CominIonPage />} />
           <Route path="/food" element={<FoodPage />} />

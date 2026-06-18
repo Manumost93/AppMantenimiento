@@ -237,6 +237,34 @@ export interface WorkerTaskStats {
   total: number
 }
 
+// ─── Seguridad ───────────────────────────────────────────────────────────────
+
+export type SecurityIncidentType =
+  | 'antiintrusion'
+  | 'pci'
+  | 'cctv'
+  | 'access'
+  | 'emergency'
+  | 'locksmith'
+  | 'rf_doors'
+  | 'other'
+
+export interface SecurityIncident {
+  id: number
+  date: string
+  description: string
+  zone: string
+  incident_type: SecurityIncidentType
+  internal_responsible_id?: number
+  internal_responsible?: TeamMember
+  external_company?: string
+  status: TaskStatus
+  priority: TaskPriority
+  resolution?: string
+  observations?: string
+  created_at: string
+}
+
 // ─── Rondas de apertura/cierre ───────────────────────────────────────────────
 
 export type TipoRonda = 'apertura' | 'cierre'
