@@ -139,10 +139,18 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
   async function openCam() {
     setErr('')
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      })
       setStream(s)
-      if (videoRef.current) { videoRef.current.srcObject = s; await videoRef.current.play() }
       setCamOn(true)
+      // Asignar stream en el siguiente tick para que el elemento esté montado
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = s
+          videoRef.current.play().catch(() => {})
+        }
+      }, 100)
     } catch { setErr('Cámara no disponible. Introduce el valor manualmente.') }
   }
 
@@ -167,7 +175,7 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
       </p>
       {camOn ? (
         <div className="relative rounded-xl overflow-hidden bg-black">
-          <video ref={videoRef} autoPlay playsInline className="w-full max-h-64 object-cover" />
+          <video ref={videoRef} autoPlay playsInline muted className="w-full max-h-64 object-cover bg-black" />
           <button
             onClick={shoot}
             className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full bg-white border-4 border-gray-300 shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
