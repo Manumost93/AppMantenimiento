@@ -174,13 +174,16 @@ export default function CalendarPage() {
       <div className="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
+          initialView={window.innerWidth < 768 ? 'listWeek' : 'dayGridMonth'}
           locale={esLocale}
-          headerToolbar={{
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,listWeek',
-          }}
+          headerToolbar={window.innerWidth < 768
+            ? { left: 'prev,next', center: 'title', right: 'today' }
+            : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' }
+          }
+          footerToolbar={window.innerWidth < 768
+            ? { center: 'dayGridMonth,listWeek' }
+            : undefined
+          }
           buttonText={{ today: 'Hoy', month: 'Mes', week: 'Semana', list: 'Lista' }}
           events={events}
           height="100%"
@@ -190,6 +193,9 @@ export default function CalendarPage() {
           eventClick={(info) => handleEventClick(info)}
           select={handleDateSelect}
           eventTimeFormat={{ hour: '2-digit', minute: '2-digit', meridiem: false, hour12: false }}
+          noEventsText="Sin tareas este período"
+          listDaySideFormat={{ weekday: 'long' }}
+          listDayFormat={{ day: 'numeric', month: 'long' }}
         />
       </div>
 

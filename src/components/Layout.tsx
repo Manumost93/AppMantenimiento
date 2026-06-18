@@ -54,6 +54,12 @@ export default function Layout({ children }: { children: ReactNode }) {
           pendingSync={pendingSync}
           onMenuClick={() => setSidebarOpen(true)}
         />
+        {!isOnline && (
+          <div className="bg-amber-500 dark:bg-amber-600 text-white text-xs font-semibold text-center py-2 px-4 flex items-center justify-center gap-2 shrink-0">
+            <span>⚠️</span>
+            Sin conexión — los cambios se guardarán cuando vuelva el internet
+          </div>
+        )}
         <main className="flex-1 overflow-y-auto pb-16 lg:pb-0">
           {children}
         </main>

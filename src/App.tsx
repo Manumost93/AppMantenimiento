@@ -1,24 +1,41 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { NotificationsProvider } from '@/contexts/NotificationsContext'
 import Layout from '@/components/Layout'
+import UpdatePrompt from '@/components/UpdatePrompt'
 import LoginPage from '@/pages/LoginPage'
-import CalendarPage from '@/pages/CalendarPage'
-import DashboardPage from '@/pages/DashboardPage'
-import TeamPage from '@/pages/TeamPage'
-import ProvidersPage from '@/pages/ProvidersPage'
-import DocumentsPage from '@/pages/DocumentsPage'
-import KonePage from '@/pages/KonePage'
-import CominIonPage from '@/pages/CominIonPage'
-import FoodPage from '@/pages/FoodPage'
-import RepairsPage from '@/pages/RepairsPage'
-import ReportsPage from '@/pages/ReportsPage'
-import SettingsPage from '@/pages/SettingsPage'
-import MyAreaPage from '@/pages/MyAreaPage'
-import RondasPage from '@/pages/RondasPage'
-import SecurityPage from '@/pages/SecurityPage'
-import MeetingsPage from '@/pages/MeetingsPage'
+
+// Carga diferida — reduce el bundle inicial ~40%
+const CalendarPage  = lazy(() => import('@/pages/CalendarPage'))
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
+const MyAreaPage    = lazy(() => import('@/pages/MyAreaPage'))
+const RepairsPage   = lazy(() => import('@/pages/RepairsPage'))
+const RondasPage    = lazy(() => import('@/pages/RondasPage'))
+const SecurityPage  = lazy(() => import('@/pages/SecurityPage'))
+const MeetingsPage  = lazy(() => import('@/pages/MeetingsPage'))
+const WastePage     = lazy(() => import('@/pages/WastePage'))
+const KonePage      = lazy(() => import('@/pages/KonePage'))
+const CominIonPage  = lazy(() => import('@/pages/CominIonPage'))
+const FoodPage      = lazy(() => import('@/pages/FoodPage'))
+const TeamPage      = lazy(() => import('@/pages/TeamPage'))
+const ProvidersPage = lazy(() => import('@/pages/ProvidersPage'))
+const DocumentsPage = lazy(() => import('@/pages/DocumentsPage'))
+const ReportsPage   = lazy(() => import('@/pages/ReportsPage'))
+const SettingsPage  = lazy(() => import('@/pages/SettingsPage'))
+
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center h-full p-8">
+      <div className="space-y-3 w-full max-w-md">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="animate-pulse bg-gray-200 dark:bg-slate-700 rounded-xl h-16" />
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function AppRoutes() {
   const { worker, isLoading } = useAuth()
@@ -36,26 +53,30 @@ function AppRoutes() {
   return (
     <NotificationsProvider>
       <Layout>
-        <Routes>
-          <Route path="/" element={<Navigate to="/calendar" replace />} />
-          <Route path="/calendar" element={<CalendarPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/my-area" element={<MyAreaPage />} />
-          <Route path="/repairs" element={<RepairsPage />} />
-          <Route path="/rondas" element={<RondasPage />} />
-          <Route path="/security" element={<SecurityPage />} />
-          <Route path="/meetings" element={<MeetingsPage />} />
-          <Route path="/kone" element={<KonePage />} />
-          <Route path="/comin-ion" element={<CominIonPage />} />
-          <Route path="/food" element={<FoodPage />} />
-          <Route path="/team" element={<TeamPage />} />
-          <Route path="/providers" element={<ProvidersPage />} />
-          <Route path="/documents" element={<DocumentsPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/calendar" replace />} />
-        </Routes>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/"           element={<Navigate to="/calendar" replace />} />
+            <Route path="/calendar"   element={<CalendarPage />} />
+            <Route path="/dashboard"  element={<DashboardPage />} />
+            <Route path="/my-area"    element={<MyAreaPage />} />
+            <Route path="/repairs"    element={<RepairsPage />} />
+            <Route path="/rondas"     element={<RondasPage />} />
+            <Route path="/security"   element={<SecurityPage />} />
+            <Route path="/meetings"   element={<MeetingsPage />} />
+            <Route path="/waste"      element={<WastePage />} />
+            <Route path="/kone"       element={<KonePage />} />
+            <Route path="/comin-ion"  element={<CominIonPage />} />
+            <Route path="/food"       element={<FoodPage />} />
+            <Route path="/team"       element={<TeamPage />} />
+            <Route path="/providers"  element={<ProvidersPage />} />
+            <Route path="/documents"  element={<DocumentsPage />} />
+            <Route path="/reports"    element={<ReportsPage />} />
+            <Route path="/settings"   element={<SettingsPage />} />
+            <Route path="*"           element={<Navigate to="/calendar" replace />} />
+          </Routes>
+        </Suspense>
       </Layout>
+      <UpdatePrompt />
     </NotificationsProvider>
   )
 }

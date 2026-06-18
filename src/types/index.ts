@@ -265,6 +265,24 @@ export interface SecurityIncident {
   created_at: string
 }
 
+// ─── Residuos / Contenedores ─────────────────────────────────────────────────
+
+export type WasteRequestType = 'pickup' | 'extra_container' | 'prevention'
+export type WasteRequestStatus = 'pending' | 'requested' | 'resolved'
+
+export interface WasteRequest {
+  id: number
+  date: string
+  type: WasteRequestType
+  zone?: string
+  notes?: string
+  status: WasteRequestStatus
+  created_by_id?: number
+  created_by?: TeamMember
+  resolved_at?: string
+  created_at: string
+}
+
 // ─── Reuniones ───────────────────────────────────────────────────────────────
 
 export type MeetingDepartment = 'general' | 'kone' | 'comin' | 'food' | 'security' | 'repairs'

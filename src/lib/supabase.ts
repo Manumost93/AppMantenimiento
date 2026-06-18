@@ -3,7 +3,7 @@ import type {
   TeamMember, Provider, Area, Task, KoneIncident,
   CominIonJob, FoodIncident, GeneralRepair,
   PersonalNote, MaterialRequest, Document,
-  WorkerTaskStats, RondaEntry, SecurityIncident, Meeting,
+  WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
 } from '@/types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
@@ -624,6 +624,36 @@ export async function deleteSecurityIncident(id: number): Promise<void> {
 
 export async function resetAllWorkerPins(): Promise<void> {
   const { error } = await supabase.from('workers').update({ pin_hash: '' })
+  if (error) throw error
+}
+
+// ─── Residuos / Contenedores ─────────────────────────────────────────────────
+
+export async function getWasteRequests(): Promise<WasteRequest[]> {
+  const { data, error } = await supabase
+    .from('waste_requests')
+    .select('*, created_by:workers!created_by_id(id,name,color)')
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(r => ({ ...r, created_by: r.created_by ?? undefined }))
+}
+
+export async function upsertWasteRequest(req: Partial<WasteRequest>): Promise<WasteRequest> {
+  const payload: Record<string, unknown> = { ...req }
+  delete payload.created_by
+  if (!payload.id) delete payload.id
+  const { data, error } = await supabase
+    .from('waste_requests')
+    .upsert(payload)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteWasteRequest(id: number): Promise<void> {
+  const { error } = await supabase.from('waste_requests').delete().eq('id', id)
   if (error) throw error
 }
 
