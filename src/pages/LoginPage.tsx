@@ -4,6 +4,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import type { TeamMember } from '@/types'
 import { getInitials } from '@/lib/utils'
 
+const PIN_LENGTH = 6
+
 type Step = 'select' | 'pin' | 'set_pin' | 'confirm_pin'
 
 export default function LoginPage() {
@@ -39,19 +41,19 @@ export default function LoginPage() {
       if (step === 'confirm_pin') setConfirmPin(p => p.slice(0, -1))
       return
     }
-    if (step === 'pin' && pin.length < 4) setPin(p => p + digit)
-    if (step === 'set_pin' && pin.length < 4) setPin(p => p + digit)
-    if (step === 'confirm_pin' && confirmPin.length < 4) setConfirmPin(p => p + digit)
+    if (step === 'pin' && pin.length < PIN_LENGTH) setPin(p => p + digit)
+    if (step === 'set_pin' && pin.length < PIN_LENGTH) setPin(p => p + digit)
+    if (step === 'confirm_pin' && confirmPin.length < PIN_LENGTH) setConfirmPin(p => p + digit)
   }
 
   useEffect(() => {
-    if (step === 'pin' && pin.length === 4) handleVerify()
-    if (step === 'set_pin' && pin.length === 4) setStep('confirm_pin')
-    if (step === 'confirm_pin' && confirmPin.length === 4) handleSetPin()
+    if (step === 'pin' && pin.length === PIN_LENGTH) handleVerify()
+    if (step === 'set_pin' && pin.length === PIN_LENGTH) setStep('confirm_pin')
+    if (step === 'confirm_pin' && confirmPin.length === PIN_LENGTH) handleSetPin()
   }, [pin, confirmPin, step])
 
   async function handleVerify() {
-    if (!selected || pin.length < 4) return
+    if (!selected || pin.length < PIN_LENGTH) return
     setVerifying(true)
     setError('')
     try {
@@ -135,6 +137,7 @@ export default function LoginPage() {
                 ))}
               </div>
             )}
+            {error && <p className="text-red-400 text-sm text-center mt-4">{error}</p>}
           </div>
         )}
 
@@ -158,18 +161,18 @@ export default function LoginPage() {
             </div>
             <p className="text-white font-semibold mb-1">{selected.name}</p>
             <p className="text-slate-400 text-sm mb-6">
-              {step === 'pin' && 'Introduce tu PIN'}
-              {step === 'set_pin' && 'Crea tu PIN de 4 dígitos'}
+              {step === 'pin' && 'Introduce tu PIN de 6 dígitos'}
+              {step === 'set_pin' && 'Crea tu PIN de 6 dígitos'}
               {step === 'confirm_pin' && 'Confirma tu PIN'}
             </p>
 
             {/* PIN dots */}
-            <div className="flex gap-4 mb-6">
-              {[0, 1, 2, 3].map(i => (
+            <div className="flex gap-3 mb-6">
+              {Array.from({ length: PIN_LENGTH }, (_, i) => (
                 <div
                   key={i}
                   className={`w-4 h-4 rounded-full transition-all ${
-                    i < currentPin.length ? 'bg-blue-400' : 'bg-slate-600'
+                    i < currentPin.length ? 'bg-blue-400 scale-110' : 'bg-slate-600'
                   }`}
                 />
               ))}
@@ -194,7 +197,7 @@ export default function LoginPage() {
                       d === 'del'
                         ? 'bg-slate-700 text-slate-300 hover:bg-slate-600 text-sm'
                         : d
-                          ? 'bg-slate-700 text-white hover:bg-slate-600'
+                          ? 'bg-slate-700 text-white hover:bg-slate-600 active:bg-slate-500'
                           : 'invisible'
                     }`}
                   >
@@ -205,8 +208,8 @@ export default function LoginPage() {
             )}
 
             {step === 'set_pin' && (
-              <p className="text-slate-500 text-xs text-center mt-4 max-w-[200px]">
-                Este PIN protege tu área personal. Lo necesitarás en este dispositivo.
+              <p className="text-slate-500 text-xs text-center mt-4 max-w-[220px]">
+                Elige 6 dígitos que recuerdes fácilmente. Este PIN protege tu acceso a la app.
               </p>
             )}
           </div>

@@ -84,9 +84,9 @@ export default function SettingsPage() {
 
   async function handleSavePin() {
     if (!worker) return
-    if (pin1.length < 4) return setPinMsg('El PIN debe tener 4 dígitos.')
+    if (pin1.length < 6) return setPinMsg('El PIN debe tener 6 dígitos.')
     if (pin1 !== pin2) return setPinMsg('Los PINs no coinciden.')
-    if (!/^\d{4}$/.test(pin1)) return setPinMsg('Solo se permiten números.')
+    if (!/^\d{6}$/.test(pin1)) return setPinMsg('Solo se permiten números.')
     setSavingPin(true)
     setPinMsg('')
     try {
@@ -187,38 +187,38 @@ export default function SettingsPage() {
       {tab === 'pin' && (
         <div className="max-w-sm space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
-            Cambia tu PIN de 4 dígitos. Lo necesitarás para acceder a tu área personal en este dispositivo.
+            Cambia tu PIN de 6 dígitos. Lo necesitarás para acceder a tu área personal en este dispositivo.
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nuevo PIN (4 dígitos)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Nuevo PIN (6 dígitos)</label>
             <input
               type="password"
-              maxLength={4}
+              maxLength={6}
               pattern="[0-9]*"
               inputMode="numeric"
               className="w-full text-center tracking-[1em] text-2xl border border-gray-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="····"
+              placeholder="······"
               value={pin1}
-              onChange={e => setPin1(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onChange={e => setPin1(e.target.value.replace(/\D/g, '').slice(0, 6))}
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Confirmar PIN</label>
             <input
               type="password"
-              maxLength={4}
+              maxLength={6}
               pattern="[0-9]*"
               inputMode="numeric"
               className="w-full text-center tracking-[1em] text-2xl border border-gray-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="····"
+              placeholder="······"
               value={pin2}
-              onChange={e => setPin2(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onChange={e => setPin2(e.target.value.replace(/\D/g, '').slice(0, 6))}
             />
           </div>
           {pinMsg && (
             <p className={cn('text-sm', pinMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500')}>{pinMsg}</p>
           )}
-          <Button onClick={handleSavePin} disabled={savingPin || pin1.length < 4 || pin2.length < 4} className="w-full">
+          <Button onClick={handleSavePin} disabled={savingPin || pin1.length < 6 || pin2.length < 6} className="w-full">
             {savingPin ? 'Guardando...' : 'Guardar PIN'}
           </Button>
         </div>
@@ -237,7 +237,7 @@ export default function SettingsPage() {
               {[
                 { label: 'Conexión HTTPS (Vercel)', ok: true, note: 'Todo el tráfico está cifrado' },
                 { label: 'Contraseñas con bcrypt', ok: true, note: 'Los PINs están hasheados (no texto plano)' },
-                { label: 'Acceso por PIN de 4 dígitos', ok: true, note: 'Protege el área personal de cada trabajador' },
+                { label: 'Acceso por PIN de 6 dígitos', ok: true, note: 'Protege el área personal de cada trabajador' },
                 { label: 'Notificaciones en tiempo real', ok: true, note: 'Supabase Realtime para asignaciones' },
                 { label: 'RLS (control de acceso)', ok: false, note: 'Políticas permisivas — app de uso interno' },
               ].map(item => (
