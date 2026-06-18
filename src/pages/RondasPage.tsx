@@ -131,86 +131,141 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [stream, setStream] = useState<MediaStream | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)   // ref evita re-renders
   const [camOn, setCamOn] = useState(false)
   const [photo, setPhoto] = useState<string | null>(null)
   const [err, setErr] = useState('')
+  const [starting, setStarting] = useState(false)
+  const [ready, setReady] = useState(false)            // video listo para disparar
+
+  // Asignar srcObject una vez que el elemento video está en el DOM
+  useEffect(() => {
+    if (camOn && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [camOn])
+
+  // Limpiar cámara al desmontar
+  useEffect(() => {
+    return () => { streamRef.current?.getTracks().forEach(t => t.stop()) }
+  }, [])
 
   async function openCam() {
-    setErr('')
+    setErr(''); setReady(false); setStarting(true)
     try {
+      streamRef.current?.getTracks().forEach(t => t.stop())
       const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: { facingMode: { ideal: 'environment' } }
       })
-      setStream(s)
+      streamRef.current = s
       setCamOn(true)
-      // Asignar stream en el siguiente tick para que el elemento esté montado
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = s
-          videoRef.current.play().catch(() => {})
-        }
-      }, 100)
-    } catch { setErr('Cámara no disponible. Introduce el valor manualmente.') }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ''
+      setErr(msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('denied')
+        ? 'Permiso de cámara denegado. Actívalo en ajustes del navegador o escribe el valor manualmente.'
+        : 'Cámara no disponible en este dispositivo. Introduce el valor manualmente.'
+      )
+    } finally { setStarting(false) }
+  }
+
+  function stopCam() {
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+    setCamOn(false); setReady(false)
   }
 
   function shoot() {
     if (!videoRef.current || !canvasRef.current) return
-    const ctx = canvasRef.current.getContext('2d')
+    const video = videoRef.current
+    if (!ready || video.videoWidth === 0) {
+      setErr('La cámara aún no está lista, espera un momento.')
+      return
+    }
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
     if (!ctx) return
-    canvasRef.current.width = videoRef.current.videoWidth
-    canvasRef.current.height = videoRef.current.videoHeight
-    ctx.drawImage(videoRef.current, 0, 0)
-    setPhoto(canvasRef.current.toDataURL('image/jpeg', 0.7))
-    stream?.getTracks().forEach(t => t.stop())
-    setStream(null); setCamOn(false)
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    ctx.drawImage(video, 0, 0)
+    setPhoto(canvas.toDataURL('image/jpeg', 0.85))
+    stopCam()
   }
-
-  useEffect(() => () => { stream?.getTracks().forEach(t => t.stop()) }, [stream])
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gray-500 dark:text-slate-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2 border border-blue-100 dark:border-blue-800">
+      <p className="text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2 border border-blue-100 dark:border-blue-800 font-medium">
         {desc}
       </p>
+
       {camOn ? (
-        <div className="relative rounded-xl overflow-hidden bg-black">
-          <video ref={videoRef} autoPlay playsInline muted className="w-full max-h-64 object-cover bg-black" />
+        <div className="relative rounded-xl overflow-hidden bg-black" style={{ minHeight: 200 }}>
+          <video
+            ref={videoRef}
+            autoPlay playsInline muted
+            onCanPlay={() => setReady(true)}
+            className="w-full rounded-xl"
+            style={{ maxHeight: '55vh', display: 'block' }}
+          />
+          {!ready && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-xl">
+              <p className="text-white text-sm">Iniciando cámara...</p>
+            </div>
+          )}
+          {/* Botón disparar */}
           <button
             onClick={shoot}
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full bg-white border-4 border-gray-300 shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
+            disabled={!ready}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 w-20 h-20 rounded-full bg-white border-4 border-gray-200 shadow-2xl flex items-center justify-center active:scale-90 transition-transform disabled:opacity-40"
           >
-            <Camera size={24} className="text-gray-700" />
+            <Camera size={30} className="text-gray-800" />
           </button>
+          {/* Cancelar */}
+          <button
+            onClick={stopCam}
+            className="absolute top-3 right-3 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full"
+          >✕ Cancelar</button>
         </div>
       ) : photo ? (
-        <div className="relative rounded-xl overflow-hidden">
-          <img src={photo} className="w-full max-h-48 object-contain bg-black rounded-xl" alt="Foto contador" />
+        <div className="relative rounded-xl overflow-hidden border-2 border-emerald-300 dark:border-emerald-700">
+          <img src={photo} className="w-full rounded-xl object-contain bg-black" style={{ maxHeight: '40vh' }} alt="Foto contador" />
+          <div className="absolute top-2 left-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">✓ Foto tomada</div>
           <button
             onClick={() => { setPhoto(null); openCam() }}
-            className="absolute top-2 right-2 bg-black/60 text-white text-xs px-3 py-1 rounded-full hover:bg-black/80"
-          >Repetir</button>
+            className="absolute top-2 right-2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full"
+          >↺ Repetir</button>
         </div>
       ) : (
         <button
           onClick={openCam}
-          className="w-full h-32 border-2 border-dashed border-gray-200 dark:border-slate-600 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-slate-500 hover:border-blue-400 hover:text-blue-400 dark:hover:border-blue-500 dark:hover:text-blue-400 transition-colors"
+          disabled={starting}
+          className="w-full h-32 border-2 border-dashed border-gray-200 dark:border-slate-600 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-slate-500 hover:border-blue-400 hover:text-blue-400 transition-colors disabled:opacity-50"
         >
-          <Camera size={28} />
-          <span className="text-sm font-medium">Toca para fotografiar el contador</span>
-          <span className="text-xs">o introduce el valor manualmente abajo</span>
+          <Camera size={30} />
+          <span className="text-sm font-medium">{starting ? 'Iniciando cámara...' : 'Fotografiar el contador'}</span>
+          <span className="text-xs opacity-70">o escribe el valor directamente abajo</span>
         </button>
       )}
+
       <canvas ref={canvasRef} className="hidden" />
-      {err && <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">{err}</p>}
-      <div>
-        <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-2">
-          Valor leído — {label} ({unit})
+
+      {err && (
+        <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2 border border-amber-200 dark:border-amber-800">
+          ⚠️ {err}
+        </p>
+      )}
+
+      {/* Input del valor — siempre visible */}
+      <div className={photo ? 'ring-2 ring-emerald-400 rounded-xl' : ''}>
+        <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+          {photo ? '✓ ' : ''}Valor del contador — <span className="text-blue-600 dark:text-blue-400">{label}</span> <span className="text-gray-400 font-normal">({unit})</span>
         </label>
         <input
-          type="number" step="1" min="0"
-          placeholder="Introduce el número del contador..."
-          className="w-full text-xl font-mono text-center border-2 border-gray-200 dark:border-slate-500 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
+          type="number"
+          inputMode="numeric"
+          step="1" min="0"
+          placeholder="Escribe el número que ves..."
+          className="w-full text-2xl font-mono text-center border-2 border-gray-200 dark:border-slate-500 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
           value={value}
           onChange={e => onChange(e.target.value)}
         />
