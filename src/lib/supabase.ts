@@ -588,6 +588,13 @@ export async function getDashboardStats(today: string) {
   }
 }
 
+// ─── Seguridad ────────────────────────────────────────────────────────────────
+
+export async function resetAllWorkerPins(): Promise<void> {
+  const { error } = await supabase.from('workers').update({ pin_hash: '' })
+  if (error) throw error
+}
+
 // ─── Gráfico de carga mensual por persona ─────────────────────────────────────
 
 export async function getMonthlyWorkerReport(months = 6): Promise<{

@@ -17,7 +17,7 @@ const navItems = [
   { path: '/comin-ion', icon: Paintbrush2,        label: 'COMIN / ION',        section: 'areas',  adminOnly: false },
   { path: '/food',      icon: UtensilsCrossed,    label: 'FOOD / Restaurante', section: 'areas',  adminOnly: false },
   { path: '/team',      icon: Users,              label: 'Equipo',             section: 'manage', adminOnly: false },
-  { path: '/providers', icon: Truck,              label: 'Proveedores',        section: 'manage', adminOnly: false },
+  { path: '/providers', icon: Truck,              label: 'Proveedores/Contactos', section: 'manage', adminOnly: false },
   { path: '/documents', icon: FolderOpen,         label: 'Documentos',         section: 'manage', adminOnly: false },
   { path: '/reports',   icon: BarChart2,          label: 'Informes',           section: 'manage', adminOnly: true  },
   { path: '/settings',  icon: Settings,           label: 'Configuración',      section: 'config', adminOnly: true  },

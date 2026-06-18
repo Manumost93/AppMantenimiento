@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Settings, Plus, Edit2, Trash2, Key, Info, Shield, Lock } from 'lucide-react'
+import { Settings, Plus, Edit2, Trash2, Key, Info, Shield, Lock, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
-import { getAreas, upsertArea, deleteArea, getWorkers, setWorkerPin } from '@/lib/supabase'
+import { getAreas, upsertArea, deleteArea, getWorkers, setWorkerPin, resetAllWorkerPins } from '@/lib/supabase'
 import type { Area, TeamMember } from '@/types'
 import { cn } from '@/lib/utils'
 
-type Tab = 'sections' | 'pin' | 'about'
+type Tab = 'sections' | 'pin' | 'security' | 'about'
 
 export default function SettingsPage() {
   const { worker, isAdmin } = useAuth()
@@ -38,6 +38,10 @@ export default function SettingsPage() {
   const [pin2, setPin2] = useState('')
   const [pinMsg, setPinMsg] = useState('')
   const [savingPin, setSavingPin] = useState(false)
+
+  // ── Seguridad ───────────────────────────────────────────────────────────────
+  const [resettingPins, setResettingPins] = useState(false)
+  const [resetMsg, setResetMsg] = useState('')
 
   useEffect(() => {
     Promise.all([getAreas(), getWorkers()])
@@ -109,6 +113,7 @@ export default function SettingsPage() {
         {[
           { key: 'sections' as Tab, label: 'Secciones', icon: Shield },
           { key: 'pin' as Tab, label: 'Mi PIN', icon: Key },
+          { key: 'security' as Tab, label: 'Seguridad', icon: AlertTriangle },
           { key: 'about' as Tab, label: 'Acerca de', icon: Info },
         ].map(t => {
           const Icon = t.icon
@@ -216,6 +221,97 @@ export default function SettingsPage() {
           <Button onClick={handleSavePin} disabled={savingPin || pin1.length < 4 || pin2.length < 4} className="w-full">
             {savingPin ? 'Guardando...' : 'Guardar PIN'}
           </Button>
+        </div>
+      )}
+
+      {/* ── SEGURIDAD ── */}
+      {tab === 'security' && (
+        <div className="max-w-lg space-y-4">
+          {/* Estado actual */}
+          <Card>
+            <CardContent className="pt-4 pb-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                <Shield size={15} className="text-blue-500" />
+                Estado de seguridad
+              </h3>
+              {[
+                { label: 'Conexión HTTPS (Vercel)', ok: true, note: 'Todo el tráfico está cifrado' },
+                { label: 'Contraseñas con bcrypt', ok: true, note: 'Los PINs están hasheados (no texto plano)' },
+                { label: 'Acceso por PIN de 4 dígitos', ok: true, note: 'Protege el área personal de cada trabajador' },
+                { label: 'Notificaciones en tiempo real', ok: true, note: 'Supabase Realtime para asignaciones' },
+                { label: 'RLS (control de acceso)', ok: false, note: 'Políticas permisivas — app de uso interno' },
+              ].map(item => (
+                <div key={item.label} className="flex items-start gap-2.5">
+                  {item.ok
+                    ? <CheckCircle2 size={15} className="text-emerald-500 shrink-0 mt-0.5" />
+                    : <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                  }
+                  <div>
+                    <p className="text-xs font-medium text-gray-700 dark:text-slate-300">{item.label}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-slate-500">{item.note}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Recomendaciones */}
+          <Card>
+            <CardContent className="pt-4 pb-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                <Lock size={15} className="text-amber-500" />
+                Recomendaciones
+              </h3>
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                <p className="font-medium">¿Quieres PINs más seguros?</p>
+                <p>Aumentar a 6 dígitos mejora significativamente la seguridad. Para hacerlo:</p>
+                <ol className="list-decimal ml-4 space-y-1 mt-1">
+                  <li>Haz clic en <strong>"Forzar reset de PINs"</strong> — todos los compañeros tendrán que crear un PIN nuevo</li>
+                  <li>Pide a cada compañero que use mínimo 6 dígitos al crear su nuevo PIN</li>
+                </ol>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Acciones */}
+          <Card>
+            <CardContent className="pt-4 pb-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                <RefreshCw size={15} className="text-red-500" />
+                Acciones de seguridad
+              </h3>
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-xs text-red-700 dark:text-red-400">
+                <p className="font-medium mb-1">Forzar actualización de PINs</p>
+                <p>Borra todos los PINs actuales. Al siguiente inicio de sesión, cada compañero tendrá que crear un nuevo PIN. Úsalo si sospechas que algún PIN está comprometido.</p>
+              </div>
+              {resetMsg && (
+                <p className={cn('text-sm', resetMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500')}>
+                  {resetMsg}
+                </p>
+              )}
+              <Button
+                variant="outline"
+                className="border-red-200 text-red-600 hover:bg-red-50 w-full"
+                disabled={resettingPins}
+                onClick={async () => {
+                  if (!confirm('¿Seguro? Todos los compañeros tendrán que crear un nuevo PIN la próxima vez que accedan.')) return
+                  setResettingPins(true)
+                  setResetMsg('')
+                  try {
+                    await resetAllWorkerPins()
+                    setResetMsg('✓ PINs reiniciados. Los compañeros deberán crear uno nuevo.')
+                  } catch {
+                    setResetMsg('Error al reiniciar los PINs.')
+                  } finally {
+                    setResettingPins(false)
+                  }
+                }}
+              >
+                <RefreshCw size={14} />
+                {resettingPins ? 'Reiniciando...' : 'Forzar reset de todos los PINs'}
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       )}
 

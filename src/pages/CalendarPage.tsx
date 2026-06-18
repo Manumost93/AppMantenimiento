@@ -7,8 +7,8 @@ import interactionPlugin from '@fullcalendar/interaction'
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import esLocale from '@fullcalendar/core/locales/es'
 import { getTasks, upsertTask, deleteTask, getWorkers, getAreas } from '@/lib/supabase'
-import { STATUS_COLORS, cn, getInitials, todayIso } from '@/lib/utils'
-import { Plus, Filter, X, Trash2, Save } from 'lucide-react'
+import { STATUS_COLORS, STATUS_CLASSES, STATUS_LABELS, PRIORITY_CLASSES, PRIORITY_LABELS, cn, getInitials, todayIso } from '@/lib/utils'
+import { Plus, Filter, Trash2, Save, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import type { Task, TeamMember, Area } from '@/types'
@@ -94,6 +94,19 @@ export default function CalendarPage() {
       alert('Error al guardar la tarea.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleComplete(task: Task) {
+    try {
+      const saved = await upsertTask({ ...task, status: 'done' })
+      setTasks(prev => prev.map(t => t.id === task.id
+        ? { ...saved, responsible: workers.find(w => w.id === saved.responsible_id) }
+        : t
+      ))
+      setShowDetail(false)
+    } catch {
+      alert('Error al completar.')
     }
   }
 
@@ -277,18 +290,61 @@ export default function CalendarPage() {
         <Dialog open={showDetail} onClose={() => setShowDetail(false)} title={selectedTask.title}>
           <div className="p-5 space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500 dark:text-slate-400 text-xs">Fecha</span><p className="font-medium dark:text-slate-200">{selectedTask.date}</p></div>
-              {selectedTask.start_time && <div><span className="text-gray-500 dark:text-slate-400 text-xs">Hora</span><p className="font-medium dark:text-slate-200">{selectedTask.start_time}{selectedTask.end_time ? ` - ${selectedTask.end_time}` : ''}</p></div>}
-              <div><span className="text-gray-500 dark:text-slate-400 text-xs">Estado</span><p className="font-medium capitalize dark:text-slate-200">{selectedTask.status}</p></div>
-              <div><span className="text-gray-500 dark:text-slate-400 text-xs">Prioridad</span><p className="font-medium capitalize dark:text-slate-200">{selectedTask.priority}</p></div>
-              {selectedTask.responsible && <div><span className="text-gray-500 dark:text-slate-400 text-xs">Responsable</span><p className="font-medium dark:text-slate-200">{selectedTask.responsible.name}</p></div>}
+              <div>
+                <span className="text-gray-500 dark:text-slate-400 text-xs">Fecha</span>
+                <p className="font-medium dark:text-slate-200">{new Date(selectedTask.date).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+              </div>
+              {selectedTask.start_time && (
+                <div>
+                  <span className="text-gray-500 dark:text-slate-400 text-xs">Hora</span>
+                  <p className="font-medium dark:text-slate-200">{selectedTask.start_time.slice(0,5)}{selectedTask.end_time ? ` — ${selectedTask.end_time.slice(0,5)}` : ''}</p>
+                </div>
+              )}
+              <div>
+                <span className="text-gray-500 dark:text-slate-400 text-xs block mb-1">Estado</span>
+                <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium', STATUS_CLASSES[selectedTask.status])}>
+                  {STATUS_LABELS[selectedTask.status]}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-slate-400 text-xs block mb-1">Prioridad</span>
+                <span className={cn('px-2 py-0.5 rounded text-[11px] font-medium', PRIORITY_CLASSES[selectedTask.priority])}>
+                  {PRIORITY_LABELS[selectedTask.priority]}
+                </span>
+              </div>
+              {selectedTask.responsible && (
+                <div className="col-span-2">
+                  <span className="text-gray-500 dark:text-slate-400 text-xs">Responsable</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ backgroundColor: selectedTask.responsible.color }}>
+                      {getInitials(selectedTask.responsible.name)}
+                    </div>
+                    <span className="text-sm font-medium dark:text-slate-200">{selectedTask.responsible.name}</span>
+                  </div>
+                </div>
+              )}
             </div>
-            {selectedTask.notes && <p className="text-sm text-gray-600 dark:text-slate-300 bg-gray-50 dark:bg-slate-700 rounded-lg p-3">{selectedTask.notes}</p>}
-            <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => editTask(selectedTask)}>Editar</Button>
-              <button onClick={() => handleDelete(selectedTask)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-md hover:bg-red-50">
+            {selectedTask.notes && (
+              <p className="text-sm text-gray-600 dark:text-slate-300 bg-gray-50 dark:bg-slate-700 rounded-lg p-3">{selectedTask.notes}</p>
+            )}
+            <div className="flex gap-2 pt-2 flex-wrap">
+              {selectedTask.status !== 'done' && (
+                <Button
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white min-w-[120px]"
+                  onClick={() => handleComplete(selectedTask)}
+                >
+                  <CheckCircle2 size={14} />
+                  Completar
+                </Button>
+              )}
+              <Button variant="outline" className="flex-1 min-w-[80px]" onClick={() => editTask(selectedTask)}>
+                Editar
+              </Button>
+              <button
+                onClick={() => handleDelete(selectedTask)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-md hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
                 <Trash2 size={13} />
-                Eliminar
               </button>
             </div>
           </div>
