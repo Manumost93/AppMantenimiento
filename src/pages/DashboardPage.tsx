@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react'
-import { ClipboardList, AlertCircle, Clock, CheckCircle2, Euro, Calendar, Users } from 'lucide-react'
+import { ClipboardList, AlertCircle, Clock, CheckCircle2, Euro, Calendar, Users, BarChart2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { getDashboardStats, getWorkerTaskStats } from '@/lib/supabase'
-import type { DashboardStats, WorkerTaskStats } from '@/types'
+import { getDashboardStats, getWorkerTaskStats, getMonthlyWorkerReport } from '@/lib/supabase'
+import type { DashboardStats, WorkerTaskStats, TeamMember } from '@/types'
 import { cn, STATUS_CLASSES, STATUS_LABELS, PRIORITY_CLASSES, PRIORITY_LABELS, formatCurrency, todayIso, getInitials } from '@/lib/utils'
 import { useNavigate } from 'react-router-dom'
+import WorkloadChart from '@/components/WorkloadChart'
+
+interface MonthlyTask { responsible_id: number; status: string; date: string }
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [workerStats, setWorkerStats] = useState<WorkerTaskStats[]>([])
+  const [monthlyTasks, setMonthlyTasks] = useState<MonthlyTask[]>([])
+  const [monthlyWorkers, setMonthlyWorkers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
   const today = todayIso()
@@ -17,9 +22,12 @@ export default function DashboardPage() {
     Promise.all([
       getDashboardStats(today),
       getWorkerTaskStats(),
-    ]).then(([s, ws]) => {
+      getMonthlyWorkerReport(6),
+    ]).then(([s, ws, monthly]) => {
       setStats(s)
       setWorkerStats(ws)
+      setMonthlyTasks(monthly.tasks)
+      setMonthlyWorkers(monthly.workers)
     }).finally(() => setLoading(false))
   }, [today])
 
@@ -200,6 +208,19 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* Gráfico de rendimiento mensual */}
+          {monthlyWorkers.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <BarChart2 size={16} className="text-blue-500" />
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                  Rendimiento del equipo
+                </h3>
+              </div>
+              <WorkloadChart tasks={monthlyTasks} workers={monthlyWorkers} months={6} />
+            </div>
+          )}
         </>
       )}
     </div>

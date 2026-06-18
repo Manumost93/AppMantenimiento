@@ -587,3 +587,33 @@ export async function getDashboardStats(today: string) {
     tasks_today: tasks.map(t => ({ ...t, responsible: t.responsible ?? undefined })),
   }
 }
+
+// ─── Gráfico de carga mensual por persona ─────────────────────────────────────
+
+export async function getMonthlyWorkerReport(months = 6): Promise<{
+  tasks: { responsible_id: number; status: string; date: string }[]
+  workers: TeamMember[]
+}> {
+  const from = new Date()
+  from.setMonth(from.getMonth() - (months - 1))
+  from.setDate(1)
+
+  const [{ data: tasks }, { data: workers }] = await Promise.all([
+    supabase
+      .from('tasks')
+      .select('responsible_id, status, date')
+      .eq('is_personal', false)
+      .gte('date', from.toISOString().split('T')[0])
+      .not('responsible_id', 'is', null),
+    supabase
+      .from('workers')
+      .select('id, name, color')
+      .eq('active', true)
+      .order('name'),
+  ])
+
+  return {
+    tasks: (tasks ?? []) as { responsible_id: number; status: string; date: string }[],
+    workers: (workers ?? []) as TeamMember[],
+  }
+}
