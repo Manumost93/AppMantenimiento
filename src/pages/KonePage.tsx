@@ -69,22 +69,23 @@ function EquipCard({
     <button
       onClick={onCycle}
       disabled={saving}
-      title={status === 'ok' ? 'OK → click para marcar avería' : status === 'averia' ? 'Avería → click para limpiar' : 'Sin revisar → click para marcar OK'}
+      title={status === 'ok' ? 'OK → marcar avería' : status === 'averia' ? 'Avería → limpiar' : 'Sin revisar → marcar OK'}
       className={cn(
-        'relative flex flex-col items-center justify-center gap-1 p-2 rounded-xl border-2 transition-all',
+        'relative flex flex-col items-center justify-center gap-1 rounded-xl border-2 transition-all',
+        'min-h-[52px] p-1.5 sm:p-2',
         'hover:scale-105 active:scale-95 disabled:opacity-60 disabled:cursor-wait',
         cardCls,
       )}
     >
       {saving && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-slate-900/60 rounded-xl">
-          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-slate-900/70 rounded-xl">
+          <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      <span className="text-xs font-bold text-gray-800 dark:text-white leading-none">{equipId}</span>
-      {status === 'ok' && <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />}
-      {status === 'averia' && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
-      {!status && <div className="w-3.5 h-0.5 bg-gray-200 dark:bg-slate-600 rounded-full" />}
+      <span className="text-[10px] sm:text-xs font-bold text-gray-800 dark:text-white leading-none text-center">{equipId}</span>
+      {status === 'ok' && <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />}
+      {status === 'averia' && <AlertTriangle size={13} className="text-red-500 shrink-0" />}
+      {!status && <div className="w-3 h-0.5 bg-gray-300 dark:bg-slate-500 rounded-full" />}
     </button>
   )
 }
@@ -221,18 +222,22 @@ export default function KonePage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 dark:bg-slate-800 rounded-xl p-1">
-        {([['revisiones', '📋 Revisiones mensuales'], ['incidencias', '⚠️ Incidencias']] as [Tab, string][]).map(([t, label]) => (
+        {([
+          ['revisiones', '📋', 'Revisiones', 'Revisiones mensuales'],
+          ['incidencias', '⚠️', 'Incidencias', 'Incidencias'],
+        ] as [Tab, string, string, string][]).map(([t, icon, shortLabel, fullLabel]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              'flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all',
+              'flex-1 py-2 px-2 sm:px-3 text-xs sm:text-sm font-medium rounded-lg transition-all truncate',
               tab === t
                 ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
             )}
           >
-            {label}
+            <span className="sm:hidden">{icon} {shortLabel}</span>
+            <span className="hidden sm:inline">{icon} {fullLabel}</span>
           </button>
         ))}
       </div>
@@ -296,7 +301,10 @@ export default function KonePage() {
                 </div>
                 <div className={cn(
                   'p-3 grid gap-2',
-                  group.items.length >= 8 ? 'grid-cols-5' : group.items.length >= 4 ? 'grid-cols-4' : 'grid-cols-3'
+                  group.items.length >= 8 ? 'grid-cols-5'
+                  : group.items.length === 6 ? 'grid-cols-3 sm:grid-cols-6'
+                  : group.items.length >= 4 ? 'grid-cols-4'
+                  : 'grid-cols-3'
                 )}>
                   {group.items.map(equipId => (
                     <EquipCard
@@ -318,17 +326,17 @@ export default function KonePage() {
       {tab === 'incidencias' && (
         <div className="space-y-4">
           {/* Search & filter */}
-          <div className="flex gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[180px]">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
-                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                 placeholder="Buscar por equipo o descripción..."
                 value={search} onChange={e => setSearch(e.target.value)}
               />
             </div>
             <select
-              className="text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 dark:text-white focus:outline-none"
+              className="text-sm border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2.5 bg-white dark:bg-slate-800 dark:text-white focus:outline-none sm:w-44"
               value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
             >
               <option value="">Todos los estados</option>
