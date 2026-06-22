@@ -52,55 +52,104 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       supabase.removeChannel(channelRef.current)
     }
 
+    function pushNotif(title: string, body: string, tag?: string) {
+      setNotifications(prev => [
+        { id: `${Date.now()}-${Math.random()}`, title, body, timestamp: new Date(), read: false },
+        ...prev,
+      ].slice(0, 30))
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try { new window.Notification(title, { body, icon: '/icons/icon-192.png', tag }) }
+        catch { /* safari restriction */ }
+      }
+    }
+
     const channel = supabase
-      .channel(`task-notifs-worker-${worker.id}`)
+      .channel(`notifs-worker-${worker.id}`)
+      // ── Calendario / tareas (INSERT nuevo) ────────────────────────────────
       .on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'postgres_changes' as any,
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'tasks',
-          filter: `responsible_id=eq.${worker.id}`,
-        },
+        { event: 'INSERT', schema: 'public', table: 'tasks', filter: `responsible_id=eq.${worker.id}` },
         (payload: { new: Record<string, unknown> }) => {
-          const title = '📋 Nueva tarea asignada'
-          const body = String(payload.new.title ?? 'Tienes una nueva tarea')
-          setNotifications(prev => [
-            { id: `${Date.now()}-${Math.random()}`, title, body, timestamp: new Date(), read: false },
-            ...prev,
-          ].slice(0, 30))
-          if ('Notification' in window && Notification.permission === 'granted') {
-            try {
-              new window.Notification(title, { body, icon: '/icons/icon-192.png', tag: String(payload.new.id) })
-            } catch { /* safari restriction */ }
+          pushNotif('📋 Nueva tarea asignada', String(payload.new.title ?? 'Tienes una nueva tarea'), String(payload.new.id))
+        }
+      )
+      // ── Calendario / tareas (UPDATE — cambio de responsable) ──────────────
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: 'UPDATE', schema: 'public', table: 'tasks' },
+        (payload: { new: Record<string, unknown>; old: Record<string, unknown> }) => {
+          if (payload.old.responsible_id !== worker.id && payload.new.responsible_id === worker.id) {
+            pushNotif('📋 Tarea asignada a ti', String(payload.new.title ?? 'Tienes una nueva tarea asignada'))
           }
         }
       )
+      // ── Reparaciones (INSERT nuevo con responsable) ───────────────────────
       .on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'postgres_changes' as any,
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'tasks',
-        },
+        { event: 'INSERT', schema: 'public', table: 'general_repairs', filter: `responsible_id=eq.${worker.id}` },
+        (payload: { new: Record<string, unknown> }) => {
+          pushNotif('🔧 Nueva reparación asignada', String(payload.new.description ?? 'Se te ha asignado una reparación'), String(payload.new.id))
+        }
+      )
+      // ── Reparaciones (UPDATE — reasignación) ──────────────────────────────
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: 'UPDATE', schema: 'public', table: 'general_repairs' },
         (payload: { new: Record<string, unknown>; old: Record<string, unknown> }) => {
-          const wasAssigned =
-            payload.old.responsible_id !== worker.id &&
-            payload.new.responsible_id === worker.id
-          if (!wasAssigned) return
-          const title = '📋 Tarea asignada a ti'
-          const body = String(payload.new.title ?? 'Tienes una nueva tarea asignada')
-          setNotifications(prev => [
-            { id: `${Date.now()}-${Math.random()}`, title, body, timestamp: new Date(), read: false },
-            ...prev,
-          ].slice(0, 30))
-          if ('Notification' in window && Notification.permission === 'granted') {
-            try {
-              new window.Notification(title, { body, icon: '/icons/icon-192.png' })
-            } catch { /* safari restriction */ }
+          if (payload.old.responsible_id !== worker.id && payload.new.responsible_id === worker.id) {
+            pushNotif('🔧 Reparación asignada a ti', String(payload.new.description ?? 'Se te ha asignado una reparación'))
           }
+        }
+      )
+      // ── KONE (INSERT) ─────────────────────────────────────────────────────
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: 'INSERT', schema: 'public', table: 'kone_incidents', filter: `internal_responsible_id=eq.${worker.id}` },
+        (payload: { new: Record<string, unknown> }) => {
+          pushNotif('🏗️ Incidencia KONE asignada', `${payload.new.elevator ?? ''} — ${payload.new.description ?? ''}`.trim())
+        }
+      )
+      // ── KONE (UPDATE — reasignación) ──────────────────────────────────────
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: 'UPDATE', schema: 'public', table: 'kone_incidents' },
+        (payload: { new: Record<string, unknown>; old: Record<string, unknown> }) => {
+          if (payload.old.internal_responsible_id !== worker.id && payload.new.internal_responsible_id === worker.id) {
+            pushNotif('🏗️ Incidencia KONE asignada a ti', `${payload.new.elevator ?? ''} — ${payload.new.description ?? ''}`.trim())
+          }
+        }
+      )
+      // ── Seguridad (INSERT) ────────────────────────────────────────────────
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: 'INSERT', schema: 'public', table: 'security_incidents', filter: `internal_responsible_id=eq.${worker.id}` },
+        (payload: { new: Record<string, unknown> }) => {
+          pushNotif('🛡️ Incidencia de Seguridad asignada', String(payload.new.description ?? 'Nueva incidencia de seguridad'))
+        }
+      )
+      // ── COMIN/ION (INSERT) ────────────────────────────────────────────────
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: 'INSERT', schema: 'public', table: 'comin_ion_jobs', filter: `internal_responsible_id=eq.${worker.id}` },
+        (payload: { new: Record<string, unknown> }) => {
+          pushNotif('🎨 Trabajo COMIN asignado', String(payload.new.work_requested ?? 'Nuevo trabajo COMIN/ION'))
+        }
+      )
+      // ── FOOD (INSERT) ─────────────────────────────────────────────────────
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: 'INSERT', schema: 'public', table: 'food_incidents', filter: `internal_responsible_id=eq.${worker.id}` },
+        (payload: { new: Record<string, unknown> }) => {
+          pushNotif('🍽️ Incidencia FOOD asignada', String(payload.new.affected_element ?? 'Nueva incidencia en restaurante'))
         }
       )
       .subscribe()

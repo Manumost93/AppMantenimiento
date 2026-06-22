@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type {
-  TeamMember, Provider, Area, Task, KoneIncident,
+  TeamMember, Provider, Area, Task, KoneIncident, KoneMonthlyCheck,
   CominIonJob, FoodIncident, GeneralRepair,
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
@@ -617,6 +617,54 @@ export async function upsertSecurityIncident(incident: Partial<SecurityIncident>
 
 export async function deleteSecurityIncident(id: number): Promise<void> {
   const { error } = await supabase.from('security_incidents').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── KONE Revisiones Mensuales ────────────────────────────────────────────────
+// SQL: CREATE TABLE IF NOT EXISTS kone_monthly_checks (
+//   id BIGSERIAL PRIMARY KEY,
+//   year INTEGER NOT NULL,
+//   month INTEGER NOT NULL,
+//   equipment_id TEXT NOT NULL,
+//   equipment_type TEXT NOT NULL,
+//   status TEXT NOT NULL DEFAULT 'ok',
+//   notes TEXT,
+//   worker_id BIGINT REFERENCES workers(id) ON DELETE SET NULL,
+//   updated_at TIMESTAMPTZ DEFAULT NOW(),
+//   UNIQUE(year, month, equipment_id)
+// );
+// ALTER TABLE kone_monthly_checks ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "public_access" ON kone_monthly_checks FOR ALL USING (true);
+
+export async function getKoneMonthlyChecks(year: number, month: number): Promise<KoneMonthlyCheck[]> {
+  const { data, error } = await supabase
+    .from('kone_monthly_checks')
+    .select('*, worker:workers!worker_id(id,name,color)')
+    .eq('year', year)
+    .eq('month', month)
+  if (error) throw error
+  return (data ?? []).map(c => ({ ...c, worker: c.worker ?? undefined }))
+}
+
+export async function upsertKoneMonthlyCheck(
+  year: number, month: number,
+  equipment_id: string, equipment_type: string,
+  status: string, notes?: string, worker_id?: number
+): Promise<KoneMonthlyCheck> {
+  const { data, error } = await supabase
+    .from('kone_monthly_checks')
+    .upsert(
+      { year, month, equipment_id, equipment_type, status, notes, worker_id, updated_at: new Date().toISOString() },
+      { onConflict: 'year,month,equipment_id' }
+    )
+    .select('*, worker:workers!worker_id(id,name,color)')
+    .single()
+  if (error) throw error
+  return { ...data, worker: data.worker ?? undefined }
+}
+
+export async function deleteKoneMonthlyCheck(id: number): Promise<void> {
+  const { error } = await supabase.from('kone_monthly_checks').delete().eq('id', id)
   if (error) throw error
 }
 

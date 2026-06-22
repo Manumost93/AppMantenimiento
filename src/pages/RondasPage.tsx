@@ -124,6 +124,40 @@ function emptyForm(): WizardForm {
   }
 }
 
+// ─── OCR helper ───────────────────────────────────────────────────────────────
+
+async function extractNumberFromCanvas(canvas: HTMLCanvasElement): Promise<string> {
+  try {
+    const offscreen = document.createElement('canvas')
+    offscreen.width = canvas.width
+    offscreen.height = canvas.height
+    const ctx = offscreen.getContext('2d')!
+    ctx.drawImage(canvas, 0, 0)
+    const imgData = ctx.getImageData(0, 0, offscreen.width, offscreen.height)
+    const d = imgData.data
+    for (let i = 0; i < d.length; i += 4) {
+      const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+      const v = gray < 128 ? Math.max(0, gray - 40) : Math.min(255, gray + 40)
+      d[i] = d[i + 1] = d[i + 2] = v
+    }
+    ctx.putImageData(imgData, 0, 0)
+
+    const { createWorker } = await import('tesseract.js')
+    const tWorker = await createWorker('eng', 1, { logger: () => {} })
+    await tWorker.setParameters({
+      tessedit_char_whitelist: '0123456789.',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tessedit_pageseg_mode: 7 as any,
+    })
+    const { data: { text } } = await tWorker.recognize(offscreen)
+    await tWorker.terminate()
+    const clean = text.replace(/[^0-9.]/g, '').replace(/\.{2,}/g, '.')
+    return clean.replace(/^\./, '').replace(/\.$/, '')
+  } catch {
+    return ''
+  }
+}
+
 // ─── Camera capture ───────────────────────────────────────────────────────────
 
 function CameraCapture({ label, desc, unit, value, onChange }: {
@@ -131,14 +165,14 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)   // ref evita re-renders
+  const streamRef = useRef<MediaStream | null>(null)
   const [camOn, setCamOn] = useState(false)
   const [photo, setPhoto] = useState<string | null>(null)
   const [err, setErr] = useState('')
   const [starting, setStarting] = useState(false)
-  const [ready, setReady] = useState(false)            // video listo para disparar
+  const [ready, setReady] = useState(false)
+  const [ocrRunning, setOcrRunning] = useState(false)
 
-  // Asignar srcObject una vez que el elemento video está en el DOM
   useEffect(() => {
     if (camOn && videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current
@@ -146,7 +180,6 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
     }
   }, [camOn])
 
-  // Limpiar cámara al desmontar
   useEffect(() => {
     return () => { streamRef.current?.getTracks().forEach(t => t.stop()) }
   }, [])
@@ -190,6 +223,11 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
     ctx.drawImage(video, 0, 0)
     setPhoto(canvas.toDataURL('image/jpeg', 0.85))
     stopCam()
+    // Auto-OCR: detect number and fill input
+    setOcrRunning(true)
+    extractNumberFromCanvas(canvas).then(detected => {
+      if (detected) onChange(detected)
+    }).finally(() => setOcrRunning(false))
   }
 
   return (
@@ -212,7 +250,6 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
               <p className="text-white text-sm">Iniciando cámara...</p>
             </div>
           )}
-          {/* Botón disparar */}
           <button
             onClick={shoot}
             disabled={!ready}
@@ -220,7 +257,6 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
           >
             <Camera size={30} className="text-gray-800" />
           </button>
-          {/* Cancelar */}
           <button
             onClick={stopCam}
             className="absolute top-3 right-3 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full"
@@ -231,7 +267,7 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
           <img src={photo} className="w-full rounded-xl object-contain bg-black" style={{ maxHeight: '40vh' }} alt="Foto contador" />
           <div className="absolute top-2 left-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">✓ Foto tomada</div>
           <button
-            onClick={() => { setPhoto(null); openCam() }}
+            onClick={() => { setPhoto(null); onChange(''); openCam() }}
             className="absolute top-2 right-2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full"
           >↺ Repetir</button>
         </div>
@@ -255,20 +291,35 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
         </p>
       )}
 
-      {/* Input del valor — siempre visible */}
+      {/* Input del valor — siempre visible, se rellena automáticamente tras la foto */}
       <div className={photo ? 'ring-2 ring-emerald-400 rounded-xl' : ''}>
         <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
-          {photo ? '✓ ' : ''}Valor del contador — <span className="text-blue-600 dark:text-blue-400">{label}</span> <span className="text-gray-400 font-normal">({unit})</span>
+          {ocrRunning
+            ? '🔍 Leyendo número automáticamente...'
+            : (photo && value)
+            ? '✓ Número detectado — corrige si es necesario'
+            : <>Valor del contador — <span className="text-blue-600 dark:text-blue-400">{label}</span> <span className="text-gray-400 font-normal">({unit})</span></>
+          }
         </label>
-        <input
-          type="number"
-          inputMode="numeric"
-          step="1" min="0"
-          placeholder="Escribe el número que ves..."
-          className="w-full text-2xl font-mono text-center border-2 border-gray-200 dark:border-slate-500 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-        />
+        <div className="relative">
+          {ocrRunning && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-slate-700/80 rounded-xl z-10">
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-sm font-medium">
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                Analizando imagen...
+              </div>
+            </div>
+          )}
+          <input
+            type="number"
+            inputMode="numeric"
+            step="any" min="0"
+            placeholder="Escribe el número o fotografía el contador..."
+            className="w-full text-2xl font-mono text-center border-2 border-gray-200 dark:border-slate-500 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+          />
+        </div>
       </div>
     </div>
   )
@@ -378,8 +429,8 @@ function generatePDF(form: WizardForm) {
       ['BIEN', 'MAL'],
     ],
     body: tableBody,
-    styles: { fontSize: 7, cellPadding: 1.2, lineColor: [180, 180, 180], lineWidth: 0.1 },
-    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+    styles: { fontSize: 6.5, cellPadding: 0.7, lineColor: [180, 180, 180], lineWidth: 0.1 },
+    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', fontSize: 7, cellPadding: 1.0 },
     columnStyles: {
       0: { cellWidth: 32 },
       1: { cellWidth: 63 },
@@ -395,7 +446,7 @@ function generatePDF(form: WizardForm) {
 
   // ── Fila REALIZADO POR ───────────────────────────────────────────────────────
   autoTable(doc, {
-    startY: checksY + 1,
+    startY: checksY + 0.5,
     body: [[
       { content: 'REALIZADO POR:', styles: { fontStyle: 'bold', fillColor: [255, 255, 255] } },
       { content: form.nombre.toUpperCase(), styles: { fillColor: [255, 255, 0], fontStyle: 'bold', textColor: [0, 0, 0] } },
@@ -404,7 +455,7 @@ function generatePDF(form: WizardForm) {
       { content: 'Hora Fin:', styles: { fontStyle: 'bold', halign: 'right', fillColor: [255, 255, 255] } },
       { content: form.hora_fin, styles: { fillColor: [255, 255, 0], fontStyle: 'bold', halign: 'center' } },
     ]],
-    styles: { fontSize: 8, cellPadding: 1.5, lineColor: [180, 180, 180], lineWidth: 0.1 },
+    styles: { fontSize: 8, cellPadding: 1.0, lineColor: [180, 180, 180], lineWidth: 0.1 },
     columnStyles: {
       0: { cellWidth: 30 },
       1: { cellWidth: 50 },
@@ -421,7 +472,7 @@ function generatePDF(form: WizardForm) {
 
   // ── Fila DIA DEL MES + lecturas ──────────────────────────────────────────────
   autoTable(doc, {
-    startY: realizadoY + 0.5,
+    startY: realizadoY + 0.3,
     head: [['DIA DEL MES', 'Electricidad', 'AGUA PCI', 'AGUA COMERCIAL', 'PCI JOCKEY', 'COMPRESOR']],
     body: [[
       { content: String(form.dia_mes), styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
@@ -431,7 +482,7 @@ function generatePDF(form: WizardForm) {
       { content: form.pci_jockey || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
       { content: form.compresor || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
     ]],
-    styles: { fontSize: 8, cellPadding: 1.5, halign: 'center', lineColor: [180, 180, 180], lineWidth: 0.1 },
+    styles: { fontSize: 8, cellPadding: 1.0, halign: 'center', lineColor: [180, 180, 180], lineWidth: 0.1 },
     headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.3 },
     margin: { left: MARGIN, right: MARGIN },
   })

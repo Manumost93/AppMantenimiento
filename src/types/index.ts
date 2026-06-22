@@ -309,6 +309,24 @@ export interface Meeting {
   created_at: string
 }
 
+// ─── KONE Revisiones Mensuales ───────────────────────────────────────────────
+
+export type KoneEquipmentType = 'elevator' | 'travelator' | 'escalator' | 'montacargas'
+export type KoneMonthlyStatus = 'ok' | 'averia'
+
+export interface KoneMonthlyCheck {
+  id: number
+  year: number
+  month: number
+  equipment_id: string
+  equipment_type: KoneEquipmentType
+  status: KoneMonthlyStatus
+  notes?: string
+  worker_id?: number
+  worker?: TeamMember
+  updated_at: string
+}
+
 // ─── Rondas de apertura/cierre ───────────────────────────────────────────────
 
 export type TipoRonda = 'apertura' | 'cierre'
