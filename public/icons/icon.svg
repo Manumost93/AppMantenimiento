@@ -1,4 +1,73 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
-  <rect width="192" height="192" rx="40" fill="#3B82F6"/>
-  <text x="50%" y="58%" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="system-ui,sans-serif" font-weight="bold" font-size="72">IK</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e3a5f"/>
+      <stop offset="100%" style="stop-color:#0c1e35"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- Decorative top-right glow -->
+  <circle cx="430" cy="80" r="120" fill="#3b82f6" opacity="0.06"/>
+  <!-- Bottom-left glow -->
+  <circle cx="80" cy="430" r="100" fill="#3b82f6" opacity="0.06"/>
+
+  <!-- Gear shape (8 teeth) -->
+  <g transform="translate(256,220)">
+    <!-- Gear teeth using polygon approach -->
+    <g fill="url(#blue)" opacity="0.9">
+      <!-- 8 teeth as rotated rectangles -->
+      <rect x="-11" y="-116" width="22" height="30" rx="5"/>
+      <rect x="-11" y="86" width="22" height="30" rx="5"/>
+      <rect x="86" y="-11" width="30" height="22" rx="5"/>
+      <rect x="-116" y="-11" width="30" height="22" rx="5"/>
+      <rect x="-11" y="-116" width="22" height="30" rx="5" transform="rotate(45)"/>
+      <rect x="-11" y="-116" width="22" height="30" rx="5" transform="rotate(90)"/>
+      <rect x="-11" y="-116" width="22" height="30" rx="5" transform="rotate(135)"/>
+      <rect x="-11" y="-116" width="22" height="30" rx="5" transform="rotate(180)"/>
+      <rect x="-11" y="-116" width="22" height="30" rx="5" transform="rotate(225)"/>
+      <rect x="-11" y="-116" width="22" height="30" rx="5" transform="rotate(270)"/>
+      <rect x="-11" y="-116" width="22" height="30" rx="5" transform="rotate(315)"/>
+    </g>
+    <!-- Gear ring -->
+    <circle r="90" fill="url(#blue)" opacity="0.18"/>
+    <circle r="86" fill="none" stroke="#3b82f6" stroke-width="5" opacity="0.6"/>
+    <!-- Gear hole fill -->
+    <circle r="56" fill="#0c1e35"/>
+    <!-- Inner decorative ring -->
+    <circle r="50" fill="none" stroke="#3b82f6" stroke-width="1.5" opacity="0.3"/>
+  </g>
+
+  <!-- Wrench icon inside gear -->
+  <g transform="translate(256,220)">
+    <!-- Wrench body rotated 45deg -->
+    <g transform="rotate(-40)">
+      <!-- Handle -->
+      <rect x="-9" y="2" width="18" height="60" rx="8" fill="#93c5fd"/>
+      <!-- Head circle -->
+      <circle cx="0" cy="-14" r="26" fill="#60a5fa"/>
+      <circle cx="0" cy="-14" r="14" fill="#0c1e35"/>
+      <!-- Wrench opening slot -->
+      <rect x="-9" y="-28" width="18" height="8" rx="3" fill="#60a5fa"/>
+    </g>
+  </g>
+
+  <!-- Blue accent bar -->
+  <rect x="96" y="368" width="320" height="3" rx="2" fill="url(#blue)" opacity="0.7"/>
+
+  <!-- IKEA text -->
+  <text x="256" y="430" text-anchor="middle"
+        font-family="'Arial Black','Arial',system-ui,sans-serif"
+        font-weight="900" font-size="58" fill="#ffffff" letter-spacing="10">IKEA</text>
+
+  <!-- MANTENIMIENTO text -->
+  <text x="256" y="472" text-anchor="middle"
+        font-family="'Arial',system-ui,sans-serif"
+        font-weight="400" font-size="21" fill="#60a5fa" letter-spacing="6">MANTENIMIENTO</text>
 </svg>
