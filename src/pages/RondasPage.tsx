@@ -108,7 +108,13 @@ function addHour(t: string) {
   const [h, m] = t.split(':').map(Number)
   return `${String((h + 1) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
-function weekOfMonth() { return Math.ceil(new Date().getDate() / 7) }
+function weekOfYear() {
+  const d = new Date()
+  const dayNum = d.getDay() || 7
+  d.setDate(d.getDate() + 4 - dayNum)
+  const yearStart = new Date(d.getFullYear(), 0, 1)
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+}
 function dayOfWeek() {
   const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
   return days[new Date().getDay()]
@@ -118,7 +124,7 @@ function emptyForm(): WizardForm {
   return {
     tipo: 'apertura', nombre: '', fecha: todayIso(),
     hora_inicio: h, hora_fin: addHour(h),
-    dia_semana: dayOfWeek(), dia_mes: new Date().getDate(), semana_mes: weekOfMonth(),
+    dia_semana: dayOfWeek(), dia_mes: new Date().getDate(), semana_mes: weekOfYear(),
     electricidad: '', agua_pci: '', agua_comercial: '', pci_jockey: '', compresor: '',
     checks: DEFAULT_CHECKS.map(c => ({ ...c })),
   }
@@ -659,19 +665,11 @@ export default function RondasPage() {
               onChange={e => setWForm(f => ({ ...f, dia_mes: Number(e.target.value) }))} />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1">Semana del mes (S.)</label>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map(s => (
-                <button key={s} onClick={() => setWForm(f => ({ ...f, semana_mes: s }))}
-                  className={cn('flex-1 py-2.5 text-sm rounded-xl font-bold border transition-colors',
-                    wForm.semana_mes === s
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-blue-400'
-                  )}>
-                  {s}
-                </button>
-              ))}
-            </div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1">Semana del año (S.)</label>
+            <input type="number" min={1} max={53}
+              className="w-full text-center text-lg font-mono border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
+              value={wForm.semana_mes}
+              onChange={e => setWForm(f => ({ ...f, semana_mes: Number(e.target.value) }))} />
           </div>
         </div>
       </div>
