@@ -31,9 +31,13 @@ export default function RepairsPage() {
 
   const filtered = repairs.filter(r =>
     (!search || r.description.toLowerCase().includes(search.toLowerCase()) || r.area?.toLowerCase().includes(search.toLowerCase())) &&
-    (!filterStatus || r.status === filterStatus) &&
+    (!filterStatus || (filterStatus === '_blocked' ? r.blocked_by_material : r.status === filterStatus)) &&
     (!filterMember || String(r.responsible_id) === filterMember)
   )
+
+  function toggleKpi(val: string) {
+    setFilterStatus(prev => prev === val ? '' : val)
+  }
 
   const stats = {
     pending: repairs.filter(r => r.status === 'pending').length,
@@ -115,27 +119,45 @@ export default function RepairsPage() {
         </Button>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs — clickables como filtro rápido */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Pendientes', value: stats.pending, icon: <Clock size={16} />, color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-50 dark:bg-slate-700' },
-          { label: 'En curso', value: stats.inprogress, icon: <Clock size={16} />, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30' },
-          { label: 'Bloqueadas', value: stats.blocked, icon: <AlertCircle size={16} />, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/30' },
-          { label: 'Finalizadas', value: stats.done, icon: <CheckCircle2 size={16} />, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/30' },
-        ].map(kpi => (
-          <Card key={kpi.label}>
-            <CardContent className="py-3">
-              <div className="flex items-center gap-2">
-                <div className={cn('p-2 rounded-lg', kpi.bg, kpi.color)}>{kpi.icon}</div>
-                <div>
-                  <div className={cn('text-xl font-bold', kpi.color)}>{kpi.value}</div>
-                  <div className="text-[11px] text-gray-500 dark:text-slate-400">{kpi.label}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {([
+          { label: 'Pendientes', val: 'pending', value: stats.pending, icon: <Clock size={16} />, color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-50 dark:bg-slate-700', ring: 'ring-gray-400' },
+          { label: 'En curso', val: 'inprogress', value: stats.inprogress, icon: <Clock size={16} />, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', ring: 'ring-blue-400' },
+          { label: 'Bloqueadas', val: '_blocked', value: stats.blocked, icon: <AlertCircle size={16} />, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/30', ring: 'ring-amber-400' },
+          { label: 'Finalizadas', val: 'done', value: stats.done, icon: <CheckCircle2 size={16} />, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/30', ring: 'ring-emerald-400' },
+        ] as const).map(kpi => {
+          const active = filterStatus === kpi.val
+          return (
+            <button key={kpi.label} onClick={() => toggleKpi(kpi.val)} className="text-left focus:outline-none">
+              <Card className={cn('transition-all', active && `ring-2 ${kpi.ring}`)}>
+                <CardContent className="py-3">
+                  <div className="flex items-center gap-2">
+                    <div className={cn('p-2 rounded-lg', kpi.bg, kpi.color)}>{kpi.icon}</div>
+                    <div>
+                      <div className={cn('text-xl font-bold', kpi.color)}>{kpi.value}</div>
+                      <div className="text-[11px] text-gray-500 dark:text-slate-400">{kpi.label}</div>
+                    </div>
+                    {active && <span className="ml-auto text-[10px] font-medium text-white bg-gray-500 dark:bg-slate-600 rounded-full px-1.5 py-0.5">✕</span>}
+                  </div>
+                </CardContent>
+              </Card>
+            </button>
+          )
+        })}
       </div>
+
+      {/* Breadcrumb de filtro activo */}
+      {filterStatus && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+          <span>Mostrando:</span>
+          <span className="font-semibold text-gray-800 dark:text-white">
+            {filterStatus === '_blocked' ? 'Bloqueadas por material' : ({ pending: 'Pendientes', inprogress: 'En curso', done: 'Finalizadas' } as Record<string,string>)[filterStatus]}
+          </span>
+          <span className="text-gray-400">({filtered.length})</span>
+          <button onClick={() => setFilterStatus('')} className="ml-1 text-blue-500 hover:underline">Ver todas</button>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex gap-2 flex-wrap">

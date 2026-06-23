@@ -7,8 +7,8 @@ import interactionPlugin from '@fullcalendar/interaction'
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import esLocale from '@fullcalendar/core/locales/es'
 import { getTasks, upsertTask, deleteTask, getWorkers, getAreas } from '@/lib/supabase'
-import { STATUS_COLORS, STATUS_CLASSES, STATUS_LABELS, PRIORITY_CLASSES, PRIORITY_LABELS, cn, getInitials, todayIso } from '@/lib/utils'
-import { Plus, Filter, Trash2, Save, CheckCircle2 } from 'lucide-react'
+import { STATUS_COLORS, STATUS_CLASSES, STATUS_LABELS, PRIORITY_CLASSES, PRIORITY_LABELS, cn, getInitials, todayIso, formatDateShort } from '@/lib/utils'
+import { Plus, Filter, Trash2, Save, CheckCircle2, Calendar, List, Clock, AlertCircle, Edit2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import type { Task, TeamMember, Area } from '@/types'
@@ -47,6 +47,8 @@ export default function CalendarPage() {
   const [form, setForm] = useState<Partial<Task>>(EMPTY_FORM)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [saving, setSaving] = useState(false)
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
+  const [listFilter, setListFilter] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -129,6 +131,21 @@ export default function CalendarPage() {
 
   if (loading) return <div className="p-5 text-center text-gray-400">Cargando calendario...</div>
 
+  const taskStats = {
+    pending: tasks.filter(t => t.status === 'pending').length,
+    inprogress: tasks.filter(t => t.status === 'inprogress').length,
+    blocked: tasks.filter(t => t.status === 'blocked').length,
+    done: tasks.filter(t => t.status === 'done').length,
+  }
+
+  const listTasks = tasks.filter(t =>
+    (!listFilter || t.status === listFilter) &&
+    (!filterMember || t.responsible_id === filterMember)
+  ).sort((a, b) => {
+    const order: Record<string, number> = { pending: 0, inprogress: 1, blocked: 2, done: 3, cancelled: 4 }
+    return (order[a.status] ?? 5) - (order[b.status] ?? 5) || a.date.localeCompare(b.date)
+  })
+
   return (
     <div className="p-4 h-full flex flex-col gap-3">
       {/* Barra de acciones */}
@@ -163,6 +180,25 @@ export default function CalendarPage() {
               </button>
             ))}
           </div>
+          {/* Toggle vista */}
+          <div className="flex bg-gray-100 dark:bg-slate-700 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={cn('flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+                viewMode === 'calendar' ? 'bg-white dark:bg-slate-600 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-slate-400'
+              )}
+            >
+              <Calendar size={13} /> Calendario
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn('flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+                viewMode === 'list' ? 'bg-white dark:bg-slate-600 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-slate-400'
+              )}
+            >
+              <List size={13} /> Lista
+            </button>
+          </div>
           <Button size="sm" onClick={() => openCreate()}>
             <Plus size={14} />
             <span className="hidden sm:inline">Nueva tarea</span>
@@ -170,7 +206,109 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* Vista Lista */}
+      {viewMode === 'list' && (
+        <div className="flex flex-col gap-3">
+          {/* KPI chips */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {([
+              { label: 'Pendientes', val: 'pending', value: taskStats.pending, icon: <Clock size={14} />, color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-50 dark:bg-slate-700', ring: 'ring-gray-400' },
+              { label: 'En curso', val: 'inprogress', value: taskStats.inprogress, icon: <Clock size={14} />, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', ring: 'ring-blue-400' },
+              { label: 'Bloqueadas', val: 'blocked', value: taskStats.blocked, icon: <AlertCircle size={14} />, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/30', ring: 'ring-amber-400' },
+              { label: 'Finalizadas', val: 'done', value: taskStats.done, icon: <CheckCircle2 size={14} />, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/30', ring: 'ring-emerald-400' },
+            ] as const).map(kpi => {
+              const active = listFilter === kpi.val
+              return (
+                <button key={kpi.val} onClick={() => setListFilter(prev => prev === kpi.val ? '' : kpi.val)}
+                  className={cn('flex items-center gap-2 p-2.5 rounded-xl border transition-all text-left',
+                    active
+                      ? `bg-white dark:bg-slate-800 border-transparent ring-2 ${kpi.ring} shadow-sm`
+                      : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 hover:border-gray-300'
+                  )}>
+                  <div className={cn('p-1.5 rounded-lg', kpi.bg, kpi.color)}>{kpi.icon}</div>
+                  <div>
+                    <div className={cn('text-base font-bold', kpi.color)}>{kpi.value}</div>
+                    <div className="text-[11px] text-gray-500 dark:text-slate-400">{kpi.label}</div>
+                  </div>
+                  {active && <span className="ml-auto text-[10px] text-gray-400">✕</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Breadcrumb */}
+          {listFilter && (
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+              <span>Mostrando:</span>
+              <span className="font-semibold text-gray-800 dark:text-white">
+                {{ pending: 'Pendientes', inprogress: 'En curso', blocked: 'Bloqueadas', done: 'Finalizadas' }[listFilter]}
+              </span>
+              <span className="text-gray-400">({listTasks.length})</span>
+              <button onClick={() => setListFilter('')} className="ml-1 text-blue-500 hover:underline">Ver todas</button>
+            </div>
+          )}
+
+          {/* Tabla de tareas */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden shadow-sm overflow-x-auto">
+            <table className="w-full text-sm min-w-[500px]">
+              <thead className="bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
+                <tr>
+                  {['Fecha', 'Título', 'Responsable', 'Prioridad', 'Estado', ''].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                {listTasks.map(task => (
+                  <tr key={task.id}
+                    className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    onClick={() => { setSelectedTask(task); setShowDetail(true) }}
+                  >
+                    <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap">{formatDateShort(task.date)}</td>
+                    <td className="px-4 py-2.5 text-xs text-gray-800 dark:text-slate-200 max-w-[220px]">
+                      <div className="truncate font-medium">{task.title}</div>
+                      {task.area && <div className="text-[10px] text-gray-400 truncate">{task.area}</div>}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {task.responsible ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                            style={{ backgroundColor: task.responsible.color }}>
+                            {task.responsible.name[0]}
+                          </div>
+                          <span className="text-xs text-gray-700 dark:text-slate-300">{task.responsible.name.split(' ')[0]}</span>
+                        </div>
+                      ) : <span className="text-xs text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={cn('px-2 py-0.5 rounded text-[11px] font-medium', PRIORITY_CLASSES[task.priority])}>
+                        {PRIORITY_LABELS[task.priority]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium', STATUS_CLASSES[task.status])}>
+                        {STATUS_LABELS[task.status]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <button onClick={e => { e.stopPropagation(); editTask(task) }}
+                        className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded transition-colors">
+                        <Edit2 size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {listTasks.length === 0 && (
+              <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">No hay tareas</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Calendario */}
+      {viewMode === 'calendar' && (
       <div className="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
@@ -198,6 +336,7 @@ export default function CalendarPage() {
           listDayFormat={{ day: 'numeric', month: 'long' }}
         />
       </div>
+      )}
 
       {/* Dialog crear/editar tarea */}
       <Dialog open={showDialog} onClose={() => setShowDialog(false)} title={form.id ? 'Editar tarea' : 'Nueva tarea compartida'}>
