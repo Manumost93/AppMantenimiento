@@ -147,7 +147,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         { event: 'INSERT', schema: 'public', table: 'comin_ion_jobs' },
         (payload: { new: Record<string, unknown> }) => {
           if (!isMe(payload.new.internal_responsible_id)) return
-          pushNotif('🎨 Trabajo COMIN asignado', String(payload.new.work_requested ?? 'Nuevo trabajo COMIN/ION'))
+          pushNotif('🎨 Trabajo COMIN asignado', String(payload.new.work_requested ?? 'Nuevo trabajo COMIN/IOM'))
         }
       )
       // ── FOOD (INSERT) ─────────────────────────────────────────────────────

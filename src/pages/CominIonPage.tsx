@@ -41,7 +41,7 @@ function generateExternalPDF(jobs: CominIonJob[], contactName: string, contactPh
   doc.text('LISTA DE TRABAJOS — EMPRESA EXTERNA', pw / 2, 9, { align: 'center' })
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
-  doc.text(filterMode === 'ion' ? 'ION / DECORACIÓN' : 'COMIN / ION', pw / 2, 14, { align: 'center' })
+  doc.text(filterMode === 'ion' ? 'IOM / DECORACIÓN' : 'COMIN / IOM', pw / 2, 14, { align: 'center' })
 
   const dateW = 36
   doc.setFillColor(255, 255, 0)
@@ -178,13 +178,13 @@ export default function CominIonPage() {
     catch { alert('No se pudo eliminar.') }
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando trabajos COMIN/ION...</div>
+  if (loading) return <div className="p-5 text-center text-gray-400">Cargando trabajos COMIN/IOM...</div>
 
   return (
     <div className="p-5 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-base font-bold text-gray-900">🎨 COMIN / ION / Decoración</h2>
+          <h2 className="text-base font-bold text-gray-900">🎨 COMIN / IOM / Decoración</h2>
           <p className="text-xs text-gray-500">{jobs.length} trabajos · Coste real: {formatCurrency(totalCost)}</p>
         </div>
         <div className="flex gap-2">
@@ -212,7 +212,7 @@ export default function CominIonPage() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm overflow-x-auto">
         <table className="w-full text-sm min-w-[600px]">
           <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>{['Fecha', 'Zona', 'Trabajo', 'Responsable', 'Coste est.', 'Coste real', 'ION', 'Estado', ''].map(h => (
+            <tr>{['Fecha', 'Zona', 'Trabajo', 'Responsable', 'Coste est.', 'Coste real', 'IOM', 'Estado', ''].map(h => (
               <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 uppercase">{h}</th>
             ))}</tr>
           </thead>
@@ -245,7 +245,7 @@ export default function CominIonPage() {
         {filtered.length === 0 && <div className="text-center py-8 text-gray-400 text-sm">No hay trabajos</div>}
       </div>
 
-      <Dialog open={showDialog} onClose={() => setShowDialog(false)} title={selected ? 'Editar trabajo' : 'Nuevo trabajo COMIN/ION'}>
+      <Dialog open={showDialog} onClose={() => setShowDialog(false)} title={selected ? 'Editar trabajo' : 'Nuevo trabajo COMIN/IOM'}>
         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Fecha</label>
@@ -307,7 +307,7 @@ export default function CominIonPage() {
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
               <input type="checkbox" checked={form.involves_ion || false} onChange={e => setForm(f => ({ ...f, involves_ion: e.target.checked }))} className="rounded" />
-              Involucra ION
+              Involucra IOM
             </label>
             <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
               <input type="checkbox" checked={form.blocked_by_material || false} onChange={e => setForm(f => ({ ...f, blocked_by_material: e.target.checked }))} className="rounded" />
@@ -326,7 +326,7 @@ export default function CominIonPage() {
       {/* PDF para empresa externa */}
       <Dialog open={showPdfDialog} onClose={() => setShowPdfDialog(false)} title="Generar PDF para empresa externa" size="sm">
         <div className="p-5 space-y-4">
-          <p className="text-xs text-gray-500">Genera una lista imprimible de trabajos pendientes para el externo (ION u otro).</p>
+          <p className="text-xs text-gray-500">Genera una lista imprimible de trabajos pendientes para el externo (IOM u otro).</p>
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Contacto COMIN responsable</label>
@@ -351,7 +351,7 @@ export default function CominIonPage() {
             <label className="block text-xs font-medium text-gray-700 mb-2">¿Qué incluir?</label>
             <div className="space-y-2">
               {([
-                { value: 'ion', label: 'Solo trabajos ION pendientes', desc: 'Filtra por "Involucra ION" y estado activo' },
+                { value: 'ion', label: 'Solo trabajos IOM pendientes', desc: 'Filtra por "Involucra IOM" y estado activo' },
                 { value: 'pending', label: 'Todos los trabajos pendientes', desc: 'Estado activo (excluye finalizados y cancelados)' },
                 { value: 'all', label: 'Todos los trabajos', desc: 'Lista completa sin filtrar por estado' },
               ] as { value: typeof pdfFilter; label: string; desc: string }[]).map(opt => (

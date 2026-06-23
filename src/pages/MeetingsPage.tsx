@@ -11,7 +11,7 @@ import autoTable from 'jspdf-autotable'
 const DEPARTMENTS: Record<MeetingDepartment, { label: string; color: string; emoji: string }> = {
   general:  { label: 'General',          color: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300',    emoji: '🏢' },
   kone:     { label: 'KONE / Ascensores', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',   emoji: '🏗️' },
-  comin:    { label: 'COMIN / ION',       color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300', emoji: '🎨' },
+  comin:    { label: 'COMIN / IOM',       color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300', emoji: '🎨' },
   food:     { label: 'FOOD / Restaurante',color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300', emoji: '🍽️' },
   security: { label: 'Seguridad',         color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',       emoji: '🛡️' },
   repairs:  { label: 'Reparaciones',      color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', emoji: '🔧' },

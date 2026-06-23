@@ -321,7 +321,7 @@ export default function ProvidersPage() {
             </label>
             <input
               className="w-full text-sm border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-800 dark:text-slate-200"
-              placeholder={formType === 'contacto' ? 'Nombre del contacto' : 'Ej: KONE, ION...'}
+              placeholder={formType === 'contacto' ? 'Nombre del contacto' : 'Ej: KONE, IOM...'}
               value={form.name || ''}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
             />

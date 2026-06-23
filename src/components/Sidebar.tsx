@@ -15,7 +15,7 @@ const navItems = [
   { path: '/rondas',    icon: ClipboardCheck,     label: 'Rondas Apertura/Cierre', section: 'work', adminOnly: false },
   { path: '/security',  icon: ShieldAlert,        label: 'Seguridad',          section: 'areas',  adminOnly: false },
   { path: '/kone',      icon: Building2,          label: 'KONE / Ascensores',  section: 'areas',  adminOnly: false },
-  { path: '/comin-ion', icon: Paintbrush2,        label: 'COMIN / ION',        section: 'areas',  adminOnly: false },
+  { path: '/comin-ion', icon: Paintbrush2,        label: 'COMIN / IOM',        section: 'areas',  adminOnly: false },
   { path: '/food',      icon: UtensilsCrossed,    label: 'FOOD / Restaurante', section: 'areas',  adminOnly: false },
   { path: '/meetings',  icon: BookOpen,           label: 'Reuniones',          section: 'work',   adminOnly: false },
   { path: '/waste',     icon: Trash2,             label: 'Residuos',           section: 'work',   adminOnly: false },

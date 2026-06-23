@@ -10,7 +10,7 @@ import { getDocuments, uploadDocumentFile, addDocumentLink, deleteDocument } fro
 import type { Document } from '@/types'
 import { cn } from '@/lib/utils'
 
-const AREAS = ['General', 'KONE', 'FOOD', 'COMIN/ION', 'Electricidad', 'Fontanería', 'Climatización', 'Exterior']
+const AREAS = ['General', 'KONE', 'FOOD', 'COMIN/IOM', 'Electricidad', 'Fontanería', 'Climatización', 'Exterior']
 
 function FileIcon({ type, size = 20 }: { type: Document['type']; size?: number }) {
   if (type === 'image') return <Image size={size} className="text-green-500" />

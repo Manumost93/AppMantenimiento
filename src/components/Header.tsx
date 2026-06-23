@@ -12,7 +12,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/my-area':   'Mi área personal',
   '/repairs':   'Reparaciones generales',
   '/kone':      'KONE / Ascensores',
-  '/comin-ion': 'COMIN / ION / Decoración',
+  '/comin-ion': 'COMIN / IOM / Decoración',
   '/food':      'FOOD / Restaurante',
   '/security':  'Seguridad',
   '/meetings':  'Reuniones',

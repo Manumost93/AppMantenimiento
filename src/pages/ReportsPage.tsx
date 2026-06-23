@@ -90,7 +90,7 @@ function downloadCostesReport(repairs: GeneralRepair[], kone: KoneIncident[], co
         { content: formatCurrency(Object.values(byArea).reduce((s, a) => s + a.total, 0)), styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } }],
       [{ content: `KONE / Ascensores (${kF.length} incidencias)`, colSpan: 4, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } },
         { content: formatCurrency(koneTotal), styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } }],
-      [{ content: `COMIN/ION (${cF.length} trabajos)`, colSpan: 4, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } },
+      [{ content: `COMIN/IOM (${cF.length} trabajos)`, colSpan: 4, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } },
         { content: formatCurrency(cominTotal), styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } }],
       [{ content: 'TOTAL GLOBAL', colSpan: 4, styles: { fontStyle: 'bold', fillColor: [255, 255, 0], textColor: [0, 0, 0] } },
         { content: formatCurrency(grandTotal), styles: { fontStyle: 'bold', fillColor: [255, 255, 0], textColor: [0, 0, 0], fontSize: 11 } }],
@@ -462,7 +462,7 @@ export default function ReportsPage() {
               {[
                 { label: 'Reparaciones generales', value: stats.costRepairs, color: 'text-orange-600' },
                 { label: 'KONE / Ascensores', value: stats.costKone, color: 'text-blue-600' },
-                { label: 'COMIN / ION', value: stats.costComin, color: 'text-teal-600' },
+                { label: 'COMIN / IOM', value: stats.costComin, color: 'text-teal-600' },
                 { label: 'Total acumulado', value: stats.costRepairs + stats.costKone + stats.costComin, color: 'text-purple-600' },
               ].map(item => (
                 <div key={item.label} className="flex items-center justify-between">
