@@ -60,7 +60,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             Sin conexión — los cambios se guardarán cuando vuelva el internet
           </div>
         )}
-        <main className="flex-1 overflow-y-auto pb-16 lg:pb-0">
+        <main className="flex-1 overflow-y-scroll pb-16 lg:pb-0">
           {children}
         </main>
       </div>
