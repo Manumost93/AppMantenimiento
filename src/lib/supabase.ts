@@ -792,3 +792,86 @@ export async function getMonthlyWorkerReport(months = 6): Promise<{
     workers: (workers ?? []) as TeamMember[],
   }
 }
+
+// ─── CBRE ─────────────────────────────────────────────────────────────────────
+
+import type { CbreJob, BmsEquipment, BmsIncident } from '@/types'
+
+export async function getCbreJobs(): Promise<CbreJob[]> {
+  const { data } = await supabase
+    .from('cbre_jobs')
+    .select('*, responsible:workers(id,name,color,role)')
+    .order('due_date', { ascending: true, nullsFirst: false })
+  return (data ?? []) as CbreJob[]
+}
+
+export async function upsertCbreJob(job: Partial<CbreJob>): Promise<CbreJob> {
+  const { id, responsible, ...payload } = job as CbreJob & { responsible?: unknown }
+  const { data, error } = await supabase
+    .from('cbre_jobs')
+    .upsert({ ...payload, ...(id ? { id } : {}), updated_at: new Date().toISOString() })
+    .select('*, responsible:workers(id,name,color,role)')
+    .single()
+  if (error) throw error
+  return data as CbreJob
+}
+
+export async function deleteCbreJob(id: number): Promise<void> {
+  await supabase.from('cbre_jobs').delete().eq('id', id)
+}
+
+// ─── BMS / IndoorClima ────────────────────────────────────────────────────────
+
+export async function getBmsEquipment(): Promise<BmsEquipment[]> {
+  const { data } = await supabase
+    .from('bms_equipment')
+    .select('*')
+    .eq('active', true)
+    .order('zone', { ascending: true })
+    .order('name', { ascending: true })
+  return (data ?? []) as BmsEquipment[]
+}
+
+export async function upsertBmsEquipment(eq: Partial<BmsEquipment>): Promise<BmsEquipment> {
+  const { id, ...payload } = eq
+  const { data, error } = await supabase
+    .from('bms_equipment')
+    .upsert({ ...payload, ...(id ? { id } : {}) })
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as BmsEquipment
+}
+
+export async function deleteBmsEquipment(id: number): Promise<void> {
+  await supabase.from('bms_equipment').update({ active: false }).eq('id', id)
+}
+
+export async function getBmsIncidents(equipmentId?: number): Promise<BmsIncident[]> {
+  let q = supabase
+    .from('bms_incidents')
+    .select('*, equipment:bms_equipment(id,name,zone), reported_by:workers(id,name,color)')
+    .order('created_at', { ascending: false })
+  if (equipmentId) q = q.eq('equipment_id', equipmentId)
+  const { data } = await q
+  return (data ?? []) as BmsIncident[]
+}
+
+export async function upsertBmsIncident(inc: Partial<BmsIncident>): Promise<BmsIncident> {
+  const { id, equipment, reported_by, ...payload } = inc as BmsIncident & { equipment?: unknown; reported_by?: unknown }
+  const { data, error } = await supabase
+    .from('bms_incidents')
+    .upsert({ ...payload, ...(id ? { id } : {}) })
+    .select('*, equipment:bms_equipment(id,name,zone), reported_by:workers(id,name,color)')
+    .single()
+  if (error) throw error
+  return data as BmsIncident
+}
+
+export async function deleteBmsIncident(id: number): Promise<void> {
+  await supabase.from('bms_incidents').delete().eq('id', id)
+}
+
+export async function updateBmsEquipmentStatus(id: number, status: BmsEquipment['status']): Promise<void> {
+  await supabase.from('bms_equipment').update({ status }).eq('id', id)
+}

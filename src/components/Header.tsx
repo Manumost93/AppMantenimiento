@@ -13,6 +13,8 @@ const PAGE_TITLES: Record<string, string> = {
   '/repairs':   'Reparaciones generales',
   '/kone':      'KONE / Ascensores',
   '/comin-ion': 'COMIN / IOM / Decoración',
+  '/cbre':      'CBRE',
+  '/bms':       'BMS / IndoorClima',
   '/food':      'FOOD / Restaurante',
   '/security':  'Seguridad',
   '/meetings':  'Reuniones',

@@ -309,6 +309,70 @@ export interface Meeting {
   created_at: string
 }
 
+// ─── CBRE ────────────────────────────────────────────────────────────────────
+
+export type CbreJobType = 'task' | 'repair' | 'pm'
+
+export interface CbreJob {
+  id: number
+  title: string
+  description?: string
+  job_type: CbreJobType
+  zone?: string
+  responsible_id?: number
+  responsible?: TeamMember
+  priority: TaskPriority
+  status: TaskStatus
+  start_date?: string
+  due_date?: string
+  completion_date?: string
+  estimated_cost: number
+  real_cost: number
+  observations?: string
+  created_at: string
+  updated_at: string
+}
+
+// ─── BMS / IndoorClima ───────────────────────────────────────────────────────
+
+export type BmsEquipmentType = 'ahu' | 'fcu' | 'chiller' | 'boiler' | 'split' | 'extract' | 'pump' | 'fan' | 'sensor' | 'other'
+export type BmsEquipmentStatus = 'ok' | 'stopped' | 'alarm' | 'repair' | 'off' | 'maintenance'
+export type BmsIncidentType = 'stopped' | 'alarm' | 'temp_issue' | 'repair' | 'on' | 'off' | 'maintenance' | 'other'
+export type BmsIncidentStatus = 'open' | 'in_progress' | 'resolved'
+
+export interface BmsEquipment {
+  id: number
+  name: string
+  equipment_type: BmsEquipmentType
+  zone?: string
+  floor?: string
+  brand?: string
+  model?: string
+  status: BmsEquipmentStatus
+  temperature_setpoint?: number
+  temperature_actual?: number
+  observations?: string
+  active: boolean
+  created_at: string
+}
+
+export interface BmsIncident {
+  id: number
+  equipment_id: number
+  equipment?: BmsEquipment
+  incident_type: BmsIncidentType
+  description: string
+  priority: TaskPriority
+  status: BmsIncidentStatus
+  reported_by_id?: number
+  reported_by?: TeamMember
+  temperature_value?: number
+  alarm_code?: string
+  resolved_at?: string
+  resolution_notes?: string
+  created_at: string
+}
+
 // ─── KONE Revisiones Mensuales ───────────────────────────────────────────────
 
 export type KoneEquipmentType = 'elevator' | 'travelator' | 'escalator' | 'montacargas'
