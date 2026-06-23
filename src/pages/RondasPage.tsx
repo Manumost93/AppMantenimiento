@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { ClipboardCheck, Sun, Moon, ArrowLeft, ArrowRight, Check, Camera, FileDown, Pencil, History, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { getRondas, upsertRonda, deleteRonda, getWorkers } from '@/lib/supabase'
+import { getRondas, upsertRonda, deleteRonda, getWorkers, uploadRondaPDF, patchRondaObservaciones } from '@/lib/supabase'
 import type { RondaEntry, TeamMember, TipoRonda } from '@/types'
 import { cn, todayIso, getInitials } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -130,21 +130,65 @@ function emptyForm(): WizardForm {
   }
 }
 
-// ─── OCR helper ───────────────────────────────────────────────────────────────
+// ─── OCR helpers ──────────────────────────────────────────────────────────────
 
-async function extractNumberFromCanvas(canvas: HTMLCanvasElement): Promise<string> {
+function otsuThreshold(grays: number[]): number {
+  const hist = new Array(256).fill(0)
+  grays.forEach(g => hist[Math.min(255, Math.round(g))]++)
+  const total = grays.length
+  let sum = 0
+  for (let i = 0; i < 256; i++) sum += i * hist[i]
+  let sumB = 0, wB = 0, max = 0, threshold = 128
+  for (let i = 0; i < 256; i++) {
+    wB += hist[i]; if (!wB) continue
+    const wF = total - wB; if (!wF) break
+    sumB += i * hist[i]
+    const between = wB * wF * ((sumB / wB) - ((sum - sumB) / wF)) ** 2
+    if (between > max) { max = between; threshold = i }
+  }
+  return threshold
+}
+
+async function extractNumberFromCanvas(
+  canvas: HTMLCanvasElement,
+  mode: 'analog' | 'digital' = 'analog'
+): Promise<string> {
   try {
+    const scale = mode === 'digital' ? 3 : 2
     const offscreen = document.createElement('canvas')
-    offscreen.width = canvas.width
-    offscreen.height = canvas.height
+    offscreen.width = canvas.width * scale
+    offscreen.height = canvas.height * scale
     const ctx = offscreen.getContext('2d')!
-    ctx.drawImage(canvas, 0, 0)
+    ctx.imageSmoothingEnabled = false
+    ctx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height)
+
     const imgData = ctx.getImageData(0, 0, offscreen.width, offscreen.height)
     const d = imgData.data
-    for (let i = 0; i < d.length; i += 4) {
-      const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-      const v = gray < 128 ? Math.max(0, gray - 40) : Math.min(255, gray + 40)
-      d[i] = d[i + 1] = d[i + 2] = v
+
+    if (mode === 'digital') {
+      // Grayscale → Otsu binarize → auto-invert if needed
+      const grays: number[] = []
+      for (let i = 0; i < d.length; i += 4)
+        grays.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2])
+      const thr = otsuThreshold(grays)
+      let blacks = 0
+      for (let i = 0; i < d.length; i += 4) {
+        const v = grays[i / 4] > thr ? 255 : 0
+        d[i] = d[i + 1] = d[i + 2] = v
+        if (v === 0) blacks++
+      }
+      // Invert if background is dark (>60% black pixels → light-on-dark display)
+      if (blacks / (d.length / 4) > 0.6) {
+        for (let i = 0; i < d.length; i += 4)
+          d[i] = d[i + 1] = d[i + 2] = 255 - d[i]
+      }
+    } else {
+      // Analog: grayscale + contrast boost
+      for (let i = 0; i < d.length; i += 4) {
+        const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+        const v = gray < 128 ? Math.max(0, gray - 40) : Math.min(255, gray + 40)
+        d[i] = d[i + 1] = d[i + 2] = v
+      }
     }
     ctx.putImageData(imgData, 0, 0)
 
@@ -166,8 +210,8 @@ async function extractNumberFromCanvas(canvas: HTMLCanvasElement): Promise<strin
 
 // ─── Camera capture ───────────────────────────────────────────────────────────
 
-function CameraCapture({ label, desc, unit, value, onChange }: {
-  label: string; desc: string; unit: string; value: string; onChange: (v: string) => void
+function CameraCapture({ label, desc, unit, value, onChange, defaultMode = 'analog' }: {
+  label: string; desc: string; unit: string; value: string; onChange: (v: string) => void; defaultMode?: 'analog' | 'digital'
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -178,6 +222,7 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
   const [starting, setStarting] = useState(false)
   const [ready, setReady] = useState(false)
   const [ocrRunning, setOcrRunning] = useState(false)
+  const [counterMode, setCounterMode] = useState<'analog' | 'digital'>(defaultMode)
 
   useEffect(() => {
     if (camOn && videoRef.current && streamRef.current) {
@@ -231,7 +276,7 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
     stopCam()
     // Auto-OCR: detect number and fill input
     setOcrRunning(true)
-    extractNumberFromCanvas(canvas).then(detected => {
+    extractNumberFromCanvas(canvas, counterMode).then(detected => {
       if (detected) onChange(detected)
     }).finally(() => setOcrRunning(false))
   }
@@ -241,6 +286,33 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
       <p className="text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2 border border-blue-100 dark:border-blue-800 font-medium">
         {desc}
       </p>
+
+      {/* Toggle analógico / digital */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 dark:text-slate-400">Tipo de contador:</span>
+        <div className="flex rounded-lg border border-gray-200 dark:border-slate-600 overflow-hidden text-xs font-medium">
+          <button
+            onClick={() => setCounterMode('analog')}
+            className={cn('px-3 py-1.5 transition-colors',
+              counterMode === 'analog'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-600'
+            )}
+          >
+            ⏱ Analógico
+          </button>
+          <button
+            onClick={() => setCounterMode('digital')}
+            className={cn('px-3 py-1.5 transition-colors',
+              counterMode === 'digital'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-600'
+            )}
+          >
+            🔢 Digital
+          </button>
+        </div>
+      </div>
 
       {camOn ? (
         <div className="relative rounded-xl overflow-hidden bg-black" style={{ minHeight: 200 }}>
@@ -331,126 +403,71 @@ function CameraCapture({ label, desc, unit, value, onChange }: {
   )
 }
 
-// ─── PDF Generator ────────────────────────────────────────────────────────────
+// ─── PDF Generators ───────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CellDef = any
 
-function generatePDF(form: WizardForm) {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const pw = doc.internal.pageSize.getWidth()   // 297 mm
+function pdfHeader(doc: jsPDF, form: WizardForm) {
+  const pw = doc.internal.pageSize.getWidth()
   const MARGIN = 4
-
-  // ── Cabecera ────────────────────────────────────────────────────────────────
-  // Fondo negro
-  doc.setFillColor(0, 0, 0)
-  doc.rect(0, 0, pw, 15, 'F')
-
-  // Caja blanca IKEA (izquierda)
-  doc.setFillColor(255, 255, 255)
-  doc.rect(0, 0, 32, 15, 'F')
+  doc.setFillColor(0, 0, 0); doc.rect(0, 0, pw, 15, 'F')
+  doc.setFillColor(255, 255, 255); doc.rect(0, 0, 32, 15, 'F')
   doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(0, 0, 0)
-  doc.text('IKEA', 3, 10)
-  doc.setFontSize(7); doc.text('ALCORCÓN', 3, 14)
-
-  // Título central (blanco sobre negro)
+  doc.text('IKEA', 3, 10); doc.setFontSize(7); doc.text('ALCORCÓN', 3, 14)
   doc.setTextColor(255, 255, 255); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
   doc.text('FICHA DIARIA MANTENIMIENTO PREVENTIVO', pw / 2, 9, { align: 'center' })
-
-  // Caja amarilla con día y semana (derecha)
   const dayW = 42
-  doc.setFillColor(255, 255, 0)
-  doc.rect(pw - dayW, 0, dayW, 15, 'F')
-  doc.setTextColor(0, 0, 0)
-  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(14)
+  doc.setFillColor(255, 255, 0); doc.rect(pw - dayW, 0, dayW, 15, 'F')
+  doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(14)
   doc.text(form.dia_semana.toUpperCase(), pw - 2, 8, { align: 'right' })
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
-  doc.text('S.', pw - dayW + 2, 13.5)
-  doc.setFontSize(13)
+  doc.text('S.', pw - dayW + 2, 13.5); doc.setFontSize(13)
   doc.text(String(form.semana_mes), pw - 2, 13.5, { align: 'right' })
-
-  // ── Subtítulo ronda ──────────────────────────────────────────────────────────
-  doc.setFillColor(230, 230, 230)
-  doc.rect(0, 15, pw, 7, 'F')
+  doc.setFillColor(230, 230, 230); doc.rect(0, 15, pw, 7, 'F')
   doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(12); doc.setTextColor(0, 0, 0)
-  doc.text(
-    `RONDA DE ${form.tipo === 'apertura' ? 'APERTURA' : 'CIERRE'}`,
-    pw / 2, 20.5, { align: 'center' }
-  )
+  doc.text(`RONDA DE ${form.tipo === 'apertura' ? 'APERTURA' : 'CIERRE'}`, pw / 2, 20.5, { align: 'center' })
+  return MARGIN
+}
 
-  // ── Tabla de checks con rowspan por ubicación ────────────────────────────────
-  // Agrupar por ubicación para hacer rowspan visual
+function generateFormularioPDF(form: WizardForm): Blob {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  const pw = doc.internal.pageSize.getWidth()
+  const MARGIN = pdfHeader(doc, form)
+
   const groups: Record<string, CheckItem[]> = {}
-  form.checks.forEach(c => {
-    if (!groups[c.ubicacion]) groups[c.ubicacion] = []
-    groups[c.ubicacion].push(c)
-  })
+  form.checks.forEach(c => { if (!groups[c.ubicacion]) groups[c.ubicacion] = []; groups[c.ubicacion].push(c) })
 
   const tableBody: CellDef[][] = []
   Object.entries(groups).forEach(([ubicacion, items]) => {
     items.forEach((c, i) => {
       const row: CellDef[] = []
-      if (i === 0) {
-        row.push({
-          content: ubicacion,
-          rowSpan: items.length,
-          styles: { fontStyle: 'bold', valign: 'middle', halign: 'center', fontSize: 7 },
-        })
-      }
+      if (i === 0) row.push({ content: ubicacion, rowSpan: items.length, styles: { fontStyle: 'bold', valign: 'middle', halign: 'center', fontSize: 7 } })
       row.push({ content: c.descripcion })
-      // BIEN: verde si bien, blanco si mal
-      row.push({
-        content: 'BIEN',
-        styles: c.estado === 'bien'
-          ? { fillColor: [21, 128, 61], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' }
-          : { fillColor: [255, 255, 255], textColor: [0, 0, 0], halign: 'center' },
-      })
-      // MAL: rojo si mal, blanco si bien
-      row.push({
-        content: 'MAL',
-        styles: c.estado === 'mal'
-          ? { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' }
-          : { fillColor: [255, 255, 255], textColor: [0, 0, 0], halign: 'center' },
-      })
-      // Comentario: amarillo si hay texto
-      row.push({
-        content: c.comentario,
-        styles: c.comentario
-          ? { fillColor: [255, 255, 0], textColor: [0, 0, 0] }
-          : {},
-      })
+      row.push({ content: 'BIEN', styles: c.estado === 'bien' ? { fillColor: [21, 128, 61], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' } : { fillColor: [255, 255, 255], textColor: [0, 0, 0], halign: 'center' } })
+      row.push({ content: 'MAL', styles: c.estado === 'mal' ? { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' } : { fillColor: [255, 255, 255], textColor: [0, 0, 0], halign: 'center' } })
+      row.push({ content: c.comentario, styles: c.comentario ? { fillColor: [255, 255, 0], textColor: [0, 0, 0] } : {} })
       tableBody.push(row)
     })
   })
 
   autoTable(doc, {
     startY: 23,
-    head: [
-      [
-        { content: 'UBICACIÓN', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
-        { content: 'DESCRIPCIÓN', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
-        { content: 'CHECK', colSpan: 2, styles: { halign: 'center' } },
-        { content: 'COMENTARIOS', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
-      ],
-      ['BIEN', 'MAL'],
-    ],
+    head: [[
+      { content: 'UBICACIÓN', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
+      { content: 'DESCRIPCIÓN', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
+      { content: 'CHECK', colSpan: 2, styles: { halign: 'center' } },
+      { content: 'COMENTARIOS', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
+    ], ['BIEN', 'MAL']],
     body: tableBody,
     styles: { fontSize: 6.5, cellPadding: 0.7, lineColor: [180, 180, 180], lineWidth: 0.1 },
     headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', fontSize: 7, cellPadding: 1.0 },
-    columnStyles: {
-      0: { cellWidth: 32 },
-      1: { cellWidth: 63 },
-      2: { cellWidth: 14 },
-      3: { cellWidth: 14 },
-      4: { cellWidth: 'auto' },
-    },
+    columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: 63 }, 2: { cellWidth: 14 }, 3: { cellWidth: 14 }, 4: { cellWidth: 'auto' } },
     margin: { left: MARGIN, right: MARGIN },
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const checksY = (doc as any).lastAutoTable.finalY
-
-  // ── Fila REALIZADO POR ───────────────────────────────────────────────────────
   autoTable(doc, {
     startY: checksY + 0.5,
     body: [[
@@ -462,38 +479,72 @@ function generatePDF(form: WizardForm) {
       { content: form.hora_fin, styles: { fillColor: [255, 255, 0], fontStyle: 'bold', halign: 'center' } },
     ]],
     styles: { fontSize: 8, cellPadding: 1.0, lineColor: [180, 180, 180], lineWidth: 0.1 },
-    columnStyles: {
-      0: { cellWidth: 30 },
-      1: { cellWidth: 50 },
-      2: { cellWidth: 24 },
-      3: { cellWidth: 18 },
-      4: { cellWidth: 18 },
-      5: { cellWidth: 18 },
-    },
+    columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 50 }, 2: { cellWidth: 24 }, 3: { cellWidth: 18 }, 4: { cellWidth: 18 }, 5: { cellWidth: 18 } },
+    margin: { left: MARGIN, right: MARGIN },
+  })
+
+  // Footer: página y fecha
+  doc.setFontSize(7); doc.setTextColor(150, 150, 150)
+  doc.text(`Formulario — ${form.fecha}`, pw - MARGIN, doc.internal.pageSize.getHeight() - 3, { align: 'right' })
+
+  return doc.output('blob')
+}
+
+function generateLecturasPDF(form: WizardForm): Blob {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  const pw = doc.internal.pageSize.getWidth()
+  const MARGIN = pdfHeader(doc, form)
+
+  // Realizado por + horas
+  autoTable(doc, {
+    startY: 23,
+    body: [[
+      { content: 'REALIZADO POR:', styles: { fontStyle: 'bold', fillColor: [255, 255, 255] } },
+      { content: form.nombre.toUpperCase(), styles: { fillColor: [255, 255, 0], fontStyle: 'bold', textColor: [0, 0, 0] } },
+      { content: 'Fecha:', styles: { fontStyle: 'bold', halign: 'right', fillColor: [255, 255, 255] } },
+      { content: form.fecha, styles: { fillColor: [255, 255, 0], fontStyle: 'bold', halign: 'center' } },
+      { content: 'Hora Inicio:', styles: { fontStyle: 'bold', halign: 'right', fillColor: [255, 255, 255] } },
+      { content: form.hora_inicio, styles: { fillColor: [255, 255, 0], fontStyle: 'bold', halign: 'center' } },
+      { content: 'Hora Fin:', styles: { fontStyle: 'bold', halign: 'right', fillColor: [255, 255, 255] } },
+      { content: form.hora_fin, styles: { fillColor: [255, 255, 0], fontStyle: 'bold', halign: 'center' } },
+    ]],
+    styles: { fontSize: 8, cellPadding: 1.2, lineColor: [180, 180, 180], lineWidth: 0.1 },
+    columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 46 }, 2: { cellWidth: 18 }, 3: { cellWidth: 22 }, 4: { cellWidth: 24 }, 5: { cellWidth: 18 }, 6: { cellWidth: 18 }, 7: { cellWidth: 18 } },
     margin: { left: MARGIN, right: MARGIN },
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const realizadoY = (doc as any).lastAutoTable.finalY
+  const infoY = (doc as any).lastAutoTable.finalY
 
-  // ── Fila DIA DEL MES + lecturas ──────────────────────────────────────────────
+  // Lecturas
   autoTable(doc, {
-    startY: realizadoY + 0.3,
-    head: [['DIA DEL MES', 'Electricidad', 'AGUA PCI', 'AGUA COMERCIAL', 'PCI JOCKEY', 'COMPRESOR']],
+    startY: infoY + 3,
+    head: [['DÍA DEL MES', 'SEMANA', 'DÍA SEMANA', 'ELECTRICIDAD (kWh)', 'AGUA PCI (m³)', 'AGUA COMERCIAL (m³)', 'PCI JOCKEY (arr.)', 'COMPRESOR (arr.)']],
     body: [[
       { content: String(form.dia_mes), styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
-      { content: form.electricidad || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
-      { content: form.agua_pci || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
-      { content: form.agua_comercial || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
-      { content: form.pci_jockey || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
-      { content: form.compresor || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
+      { content: `S.${form.semana_mes}`, styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
+      { content: form.dia_semana, styles: { fillColor: [255, 255, 0], fontStyle: 'bold' } },
+      { content: form.electricidad || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold', fontSize: 14 } },
+      { content: form.agua_pci || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold', fontSize: 14 } },
+      { content: form.agua_comercial || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold', fontSize: 14 } },
+      { content: form.pci_jockey || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold', fontSize: 14 } },
+      { content: form.compresor || '—', styles: { fillColor: [255, 255, 0], fontStyle: 'bold', fontSize: 14 } },
     ]],
-    styles: { fontSize: 8, cellPadding: 1.0, halign: 'center', lineColor: [180, 180, 180], lineWidth: 0.1 },
-    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.3 },
+    styles: { fontSize: 9, cellPadding: 3, halign: 'center', lineColor: [180, 180, 180], lineWidth: 0.1 },
+    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', fontSize: 8, cellPadding: 2 },
     margin: { left: MARGIN, right: MARGIN },
   })
 
-  doc.save(`ronda-${form.tipo}-${form.fecha}.pdf`)
+  doc.setFontSize(7); doc.setTextColor(150, 150, 150)
+  doc.text(`Lecturas — ${form.fecha}`, pw - MARGIN, doc.internal.pageSize.getHeight() - 3, { align: 'right' })
+
+  return doc.output('blob')
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -544,6 +595,11 @@ export default function RondasPage() {
   async function handleSave() {
     setSaving(true)
     try {
+      // 1. Generate PDF blobs before saving (needs wForm)
+      const blobFormulario = generateFormularioPDF(wForm)
+      const blobLecturas = generateLecturasPDF(wForm)
+
+      // 2. Save ronda to DB
       const saved = await upsertRonda({
         fecha: wForm.fecha,
         hora: wForm.hora_inicio,
@@ -559,8 +615,15 @@ export default function RondasPage() {
           checks: wForm.checks,
         }),
       })
+
+      // 3. Upload PDFs to Supabase Storage (non-blocking, best-effort)
+      uploadRondaPDF(blobFormulario, `${saved.id}-formulario.pdf`).then(urlF =>
+        uploadRondaPDF(blobLecturas, `${saved.id}-lecturas.pdf`).then(urlL => {
+          if (urlF && urlL) patchRondaObservaciones(saved.id, { pdf_formulario_url: urlF, pdf_lecturas_url: urlL })
+        })
+      )
+
       const withWorker = { ...saved, worker: workers.find(w => w.id === saved.worker_id) }
-      // Dedup: si ya existe una ronda con el mismo id (upsert actualizó una existente), reemplázala; si no, prepénde
       setRondas(prev => {
         const exists = prev.some(r => r.id === saved.id)
         return exists ? prev.map(r => r.id === saved.id ? withWorker : r) : [withWorker, ...prev]
@@ -837,19 +900,27 @@ export default function RondasPage() {
           </div>
 
           {/* Botones finales */}
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <button
-              onClick={() => generatePDF(wForm)}
-              className="flex items-center justify-center gap-2 py-3 text-sm font-semibold text-blue-600 dark:text-blue-400 border-2 border-blue-300 dark:border-blue-700 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-            >
-              <FileDown size={16} /> Descargar PDF
-            </button>
+          <div className="space-y-2 pt-1">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => downloadBlob(generateFormularioPDF(wForm), `ronda-${wForm.tipo}-${wForm.fecha}-formulario.pdf`)}
+                className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-blue-600 dark:text-blue-400 border-2 border-blue-300 dark:border-blue-700 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              >
+                <FileDown size={14} /> PDF Formulario
+              </button>
+              <button
+                onClick={() => downloadBlob(generateLecturasPDF(wForm), `ronda-${wForm.tipo}-${wForm.fecha}-lecturas.pdf`)}
+                className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-cyan-600 dark:text-cyan-400 border-2 border-cyan-300 dark:border-cyan-700 rounded-xl hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors"
+              >
+                <FileDown size={14} /> PDF Lecturas
+              </button>
+            </div>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center justify-center gap-2 py-3 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 rounded-xl transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 rounded-xl transition-colors"
             >
-              <Check size={16} /> {saving ? 'Guardando...' : 'Guardar ronda'}
+              <Check size={16} /> {saving ? 'Guardando y subiendo PDFs...' : 'Guardar ronda y subir PDFs'}
             </button>
           </div>
         </div>
@@ -1007,7 +1078,7 @@ export default function RondasPage() {
             <table className="w-full text-xs min-w-[600px]">
               <thead className="bg-gray-50 dark:bg-slate-700">
                 <tr>
-                  {['Fecha', 'Hora', 'Tipo', 'Responsable', 'Electricidad', 'Agua Com.', 'Jockey', 'Compresor', 'Acciones'].map(h => (
+                  {['Fecha', 'Hora', 'Tipo', 'Responsable', 'Electricidad', 'Agua Com.', 'Jockey', 'Compresor', 'PDFs', 'Acciones'].map(h => (
                     <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -1032,6 +1103,20 @@ export default function RondasPage() {
                       <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.lectura_agua ?? '—'}</td>
                       <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.arranques_jockey ?? '—'}</td>
                       <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.arranques_compresor ?? '—'}</td>
+                      <td className="px-3 py-2">
+                        {(() => {
+                          let obs: Record<string, unknown> = {}
+                          try { obs = JSON.parse(r.observaciones ?? '{}') } catch {}
+                          const urlF = obs.pdf_formulario_url as string | undefined
+                          const urlL = obs.pdf_lecturas_url as string | undefined
+                          return (urlF || urlL) ? (
+                            <div className="flex gap-1">
+                              {urlF && <a href={urlF} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 text-[10px] font-medium bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded whitespace-nowrap">Form.</a>}
+                              {urlL && <a href={urlL} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-800 text-[10px] font-medium bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 rounded whitespace-nowrap">Lect.</a>}
+                            </div>
+                          ) : <span className="text-gray-300 dark:text-slate-600 text-[10px]">—</span>
+                        })()}
+                      </td>
                       <td className="px-3 py-2">
                         <button onClick={() => handleDelete(r.id)} className="text-gray-300 dark:text-slate-600 hover:text-red-500 p-1 rounded">
                           <Pencil size={11} />

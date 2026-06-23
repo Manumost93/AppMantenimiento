@@ -559,6 +559,28 @@ export async function deleteRonda(id: number): Promise<void> {
   if (error) throw error
 }
 
+export async function uploadRondaPDF(pdfBlob: Blob, path: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage
+      .from('ronda-pdfs')
+      .upload(path, pdfBlob, { contentType: 'application/pdf', upsert: true })
+    if (error || !data) return null
+    const { data: { publicUrl } } = supabase.storage
+      .from('ronda-pdfs')
+      .getPublicUrl(data.path)
+    return publicUrl
+  } catch {
+    return null
+  }
+}
+
+export async function patchRondaObservaciones(id: number, extra: Record<string, unknown>): Promise<void> {
+  const { data } = await supabase.from('rondas').select('observaciones').eq('id', id).single()
+  let obs: Record<string, unknown> = {}
+  try { obs = JSON.parse(data?.observaciones ?? '{}') } catch {}
+  await supabase.from('rondas').update({ observaciones: JSON.stringify({ ...obs, ...extra }) }).eq('id', id)
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export async function getDashboardStats(today: string) {
