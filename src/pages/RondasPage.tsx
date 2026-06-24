@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { ClipboardCheck, Sun, Moon, ArrowLeft, ArrowRight, Check, Camera, FileDown, Pencil, History, Plus, Trash2, AlertTriangle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getRondas, upsertRonda, deleteRonda, getWorkers, uploadRondaPDF, patchRondaObservaciones } from '@/lib/supabase'
@@ -596,18 +599,17 @@ export default function RondasPage() {
   const [saving, setSaving] = useState(false)
 
   // List state
-  const [rondas, setRondas] = useState<RondaEntry[]>([])
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { data: rondas, setData: setRondas, loading } = useRealtimeTable('rondas', getRondas)
   const [workers, setWorkers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
   const [showHistory, setShowHistory] = useState(false)
   const [histDays, setHistDays] = useState<7 | 30 | 'all'>(7)
   const [editingRonda, setEditingRonda] = useState<RondaEntry | null>(null)
   const [editForm, setEditForm] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    Promise.all([getRondas(), getWorkers()])
-      .then(([r, w]) => { setRondas(r); setWorkers(w) })
-      .finally(() => setLoading(false))
+    getWorkers().then(setWorkers)
   }, [])
 
   function startWizard() {
@@ -663,15 +665,20 @@ export default function RondasPage() {
         return exists ? prev.map(r => r.id === saved.id ? withWorker : r) : [withWorker, ...prev]
       })
       setWizardOn(false)
+      toast.success('Ronda guardada correctamente')
     } catch {
-      alert('Error al guardar la ronda.')
+      toast.error('Error al guardar la ronda.')
     } finally { setSaving(false) }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('¿Eliminar esta ronda?')) return
-    try { await deleteRonda(id); setRondas(prev => prev.filter(r => r.id !== id)) }
-    catch { alert('No se pudo eliminar.') }
+    const ok = await confirm({ title: 'Eliminar ronda', message: '¿Eliminar esta ronda? Se perderán todas sus lecturas.' })
+    if (!ok) return
+    try {
+      await deleteRonda(id)
+      setRondas(prev => prev.filter(r => r.id !== id))
+      toast.success('Ronda eliminada')
+    } catch { toast.error('No se pudo eliminar.') }
   }
 
   function openEdit(r: RondaEntry) {
@@ -704,8 +711,9 @@ export default function RondasPage() {
       const withWorker = { ...updated, worker: workers.find(w => w.id === updated.worker_id) }
       setRondas(prev => prev.map(r => r.id === updated.id ? withWorker : r))
       setEditingRonda(null)
+      toast.success('Lecturas actualizadas')
     } catch {
-      alert('Error al guardar los cambios.')
+      toast.error('Error al guardar los cambios.')
     } finally { setSaving(false) }
   }
 

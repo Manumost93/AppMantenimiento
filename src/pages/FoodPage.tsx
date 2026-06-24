@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Trash2, Edit2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { getFoodIncidents, upsertFoodIncident, deleteFoodIncident, getWorkers } from '@/lib/supabase'
 import type { FoodIncident, TeamMember } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, formatCurrency, formatDateShort, todayIso } from '@/lib/utils'
+import { PageLoading } from '@/components/Skeleton'
 
 export default function FoodPage() {
-  const [incidents, setIncidents] = useState<FoodIncident[]>([])
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { data: incidents, setData: setIncidents, loading } = useRealtimeTable('food_incidents', getFoodIncidents)
   const [workers, setWorkers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [showDialog, setShowDialog] = useState(false)
@@ -18,9 +23,7 @@ export default function FoodPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    Promise.all([getFoodIncidents(), getWorkers()])
-      .then(([i, w]) => { setIncidents(i); setWorkers(w) })
-      .finally(() => setLoading(false))
+    getWorkers().then(setWorkers)
   }, [])
 
   const filtered = incidents.filter(i =>
@@ -50,16 +53,21 @@ export default function FoodPage() {
       const withR = { ...saved, internal_responsible: workers.find(w => w.id === saved.internal_responsible_id) }
       setIncidents(prev => selected ? prev.map(i => i.id === selected.id ? withR : i) : [withR, ...prev])
       setShowDialog(false)
-    } catch { alert('Error al guardar.') } finally { setSaving(false) }
+      toast.success(selected ? 'Incidencia actualizada' : 'Incidencia creada')
+    } catch { toast.error('Error al guardar.') } finally { setSaving(false) }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('¿Eliminar esta incidencia?')) return
-    try { await deleteFoodIncident(id); setIncidents(prev => prev.filter(i => i.id !== id)) }
-    catch { alert('No se pudo eliminar.') }
+    const ok = await confirm({ title: 'Eliminar incidencia', message: '¿Eliminar esta incidencia de FOOD?' })
+    if (!ok) return
+    try {
+      await deleteFoodIncident(id)
+      setIncidents(prev => prev.filter(i => i.id !== id))
+      toast.success('Incidencia eliminada')
+    } catch { toast.error('No se pudo eliminar.') }
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando incidencias FOOD...</div>
+  if (loading) return <PageLoading rows={5} />
 
   return (
     <div className="p-5 space-y-4">

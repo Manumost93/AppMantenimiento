@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Search, Edit2, Trash2, Clock, CheckCircle2, AlertCircle, HardHat, Wrench, CalendarClock, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -7,6 +10,7 @@ import { getCbreJobs, upsertCbreJob, deleteCbreJob, getWorkers, patchCbreJobPhot
 import type { CbreJob, CbreJobType, TeamMember } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, PRIORITY_LABELS, PRIORITY_CLASSES, formatCurrency, formatDateShort, todayIso, getInitials } from '@/lib/utils'
 import PhotoUpload from '@/components/PhotoUpload'
+import { PageLoading } from '@/components/Skeleton'
 
 // ─── Countdown helpers ────────────────────────────────────────────────────────
 
@@ -48,9 +52,10 @@ const JOB_TYPE_COLORS: Record<CbreJobType, string> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CBREPage() {
-  const [jobs, setJobs] = useState<CbreJob[]>([])
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { data: jobs, setData: setJobs, loading } = useRealtimeTable('cbre_jobs', getCbreJobs)
   const [workers, setWorkers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<CbreJobType | ''>('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -63,9 +68,7 @@ export default function CBREPage() {
   })
 
   useEffect(() => {
-    Promise.all([getCbreJobs(), getWorkers()])
-      .then(([j, w]) => { setJobs(j); setWorkers(w.filter(w => w.active)) })
-      .finally(() => setLoading(false))
+    getWorkers().then(w => setWorkers(w.filter(w => w.active)))
   }, [])
 
   // Alarmas visuales: jobs con due_date ≤ 7 días y no terminados
@@ -120,19 +123,24 @@ export default function CBREPage() {
       const withWorker = { ...saved, responsible: workers.find(w => w.id === saved.responsible_id), photos }
       setJobs(prev => selected ? prev.map(j => j.id === selected.id ? withWorker : j) : [withWorker, ...prev])
       setShowDialog(false)
-    } catch { alert('Error al guardar.') }
+      toast.success(selected ? 'Trabajo actualizado' : 'Trabajo creado')
+    } catch { toast.error('Error al guardar.') }
     finally { setSaving(false) }
   }
 
   async function handleDelete(id: number, e?: React.MouseEvent) {
     e?.stopPropagation()
-    if (!confirm('¿Eliminar este trabajo CBRE?')) return
-    await deleteCbreJob(id)
-    setJobs(prev => prev.filter(j => j.id !== id))
-    setShowDetail(false)
+    const ok = await confirm({ title: 'Eliminar trabajo CBRE', message: '¿Eliminar este trabajo de CBRE?' })
+    if (!ok) return
+    try {
+      await deleteCbreJob(id)
+      setJobs(prev => prev.filter(j => j.id !== id))
+      setShowDetail(false)
+      toast.success('Trabajo eliminado')
+    } catch { toast.error('No se pudo eliminar.') }
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando trabajos CBRE...</div>
+  if (loading) return <PageLoading kpis={3} rows={4} />
 
   return (
     <div className="p-5 space-y-4">

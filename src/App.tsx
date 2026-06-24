@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { NotificationsProvider } from '@/contexts/NotificationsContext'
+import { ToastProvider } from '@/contexts/ToastContext'
+import { ConfirmProvider } from '@/contexts/ConfirmContext'
 import Layout from '@/components/Layout'
 import UpdatePrompt from '@/components/UpdatePrompt'
 import LoginPage from '@/pages/LoginPage'
@@ -88,11 +90,15 @@ function AppRoutes() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </AuthProvider>
+      <ToastProvider>
+        <ConfirmProvider>
+          <AuthProvider>
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </AuthProvider>
+        </ConfirmProvider>
+      </ToastProvider>
     </ThemeProvider>
   )
 }

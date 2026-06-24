@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import {
   FolderOpen, Plus, ExternalLink, FileText, Link, Upload,
   Download, Trash2, Image, FileSpreadsheet, File, Search, X
@@ -43,6 +45,8 @@ function formatBytes(bytes?: number) {
 type Tab = 'files' | 'links'
 
 export default function DocumentsPage() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const [docs, setDocs] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -142,12 +146,14 @@ export default function DocumentsPage() {
   }
 
   async function handleDelete(doc: Document) {
-    if (!confirm(`¿Eliminar "${doc.name}"?`)) return
+    const ok = await confirm({ title: 'Eliminar documento', message: `¿Eliminar "${doc.name}"?` })
+    if (!ok) return
     try {
       await deleteDocument(doc.id, doc.path, doc.type)
       setDocs(prev => prev.filter(d => d.id !== doc.id))
+      toast.success('Documento eliminado')
     } catch {
-      alert('No se pudo eliminar.')
+      toast.error('No se pudo eliminar.')
     }
   }
 

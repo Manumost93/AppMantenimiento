@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Edit2, UserCheck, UserX, Trash2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,6 +12,8 @@ import type { TeamMember } from '@/types'
 import { cn, getInitials } from '@/lib/utils'
 
 export default function TeamPage() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const { isAdmin } = useAuth()
   const [team, setTeam] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
@@ -60,12 +64,14 @@ export default function TeamPage() {
   }
 
   async function handleDelete(m: TeamMember) {
-    if (!confirm(`¿Eliminar a ${m.name}? Esta acción no se puede deshacer.`)) return
+    const ok = await confirm({ title: 'Eliminar compañero', message: `¿Eliminar a ${m.name}? Esta acción no se puede deshacer.` })
+    if (!ok) return
     try {
       await deleteWorker(m.id)
       setTeam(prev => prev.filter(w => w.id !== m.id))
+      toast.success(`${m.name} eliminado`)
     } catch {
-      alert('No se pudo eliminar. Puede tener tareas asociadas.')
+      toast.error('No se pudo eliminar. Puede tener tareas asociadas.')
     }
   }
 
@@ -73,8 +79,9 @@ export default function TeamPage() {
     try {
       await toggleWorkerActive(m.id, !m.active)
       setTeam(prev => prev.map(w => w.id === m.id ? { ...w, active: !w.active } : w))
+      toast.success(`${m.name} ${m.active ? 'desactivado' : 'activado'}`)
     } catch {
-      alert('Error al actualizar.')
+      toast.error('Error al actualizar.')
     }
   }
 

@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Edit2, Trash2, Thermometer, Wind, Zap, Droplets, Fan, AlertTriangle, CheckCircle2, PowerOff, Wrench, ChevronDown, ChevronRight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -6,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { getBmsEquipment, upsertBmsEquipment, deleteBmsEquipment, getBmsIncidents, upsertBmsIncident, deleteBmsIncident, updateBmsEquipmentStatus, getWorkers } from '@/lib/supabase'
 import type { BmsEquipment, BmsEquipmentType, BmsEquipmentStatus, BmsIncident, BmsIncidentType, TeamMember } from '@/types'
 import { cn, formatDateShort, todayIso, getInitials } from '@/lib/utils'
+import { PageLoading } from '@/components/Skeleton'
 import { useAuth } from '@/contexts/AuthContext'
 
 // ─── Mapas de etiquetas e iconos ──────────────────────────────────────────────
@@ -61,11 +65,13 @@ const INCIDENT_STATUS_CLASSES: Record<string, string> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function BmsPage() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const { worker: currentWorker } = useAuth()
-  const [equipment, setEquipment] = useState<BmsEquipment[]>([])
-  const [incidents, setIncidents] = useState<BmsIncident[]>([])
+  const { data: equipment, setData: setEquipment, loading: loadingEq } = useRealtimeTable('bms_equipment', getBmsEquipment)
+  const { data: incidents, setData: setIncidents, loading: loadingInc } = useRealtimeTable('bms_incidents', getBmsIncidents)
+  const loading = loadingEq || loadingInc
   const [workers, setWorkers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'equipment' | 'incidents'>('equipment')
   const [filterStatus, setFilterStatus] = useState<BmsEquipmentStatus | ''>('')
   const [filterZone, setFilterZone] = useState('')
@@ -80,9 +86,7 @@ export default function BmsPage() {
   const [incidentForm, setIncidentForm] = useState<Partial<BmsIncident>>({ incident_type: 'alarm', priority: 'medium', status: 'open' })
 
   useEffect(() => {
-    Promise.all([getBmsEquipment(), getBmsIncidents(), getWorkers()])
-      .then(([eq, inc, w]) => { setEquipment(eq); setIncidents(inc); setWorkers(w.filter(w => w.active)) })
-      .finally(() => setLoading(false))
+    getWorkers().then(w => setWorkers(w.filter(w => w.active)))
   }, [])
 
   const zones = [...new Set(equipment.map(e => e.zone).filter(Boolean))] as string[]
@@ -114,14 +118,19 @@ export default function BmsPage() {
       const saved = await upsertBmsEquipment({ ...equipForm, id: selectedEquip?.id })
       setEquipment(prev => selectedEquip ? prev.map(e => e.id === selectedEquip.id ? saved : e) : [...prev, saved])
       setShowEquipDialog(false)
-    } catch { alert('Error al guardar equipo.') }
+      toast.success(selectedEquip ? 'Equipo actualizado' : 'Equipo añadido')
+    } catch { toast.error('Error al guardar equipo.') }
     finally { setSavingEquip(false) }
   }
 
   async function handleDeleteEquip(id: number) {
-    if (!confirm('¿Dar de baja este equipo?')) return
-    await deleteBmsEquipment(id)
-    setEquipment(prev => prev.filter(e => e.id !== id))
+    const ok = await confirm({ title: 'Dar de baja equipo', message: '¿Dar de baja este equipo BMS? Se eliminarán sus incidencias asociadas.', confirmLabel: 'Dar de baja' })
+    if (!ok) return
+    try {
+      await deleteBmsEquipment(id)
+      setEquipment(prev => prev.filter(e => e.id !== id))
+      toast.success('Equipo eliminado')
+    } catch { toast.error('No se pudo eliminar el equipo.') }
   }
 
   async function quickStatusChange(id: number, status: BmsEquipmentStatus) {
@@ -165,22 +174,30 @@ export default function BmsPage() {
         await quickStatusChange(incidentForm.equipment_id, 'repair')
       }
       setShowIncidentDialog(false)
-    } catch { alert('Error al guardar incidencia.') }
+      toast.success(selectedIncident ? 'Incidencia actualizada' : 'Incidencia registrada')
+    } catch { toast.error('Error al guardar incidencia.') }
     finally { setSavingIncident(false) }
   }
 
   async function handleDeleteIncident(id: number) {
-    if (!confirm('¿Eliminar esta incidencia?')) return
-    await deleteBmsIncident(id)
-    setIncidents(prev => prev.filter(i => i.id !== id))
+    const ok = await confirm({ title: 'Eliminar incidencia', message: '¿Eliminar esta incidencia BMS?' })
+    if (!ok) return
+    try {
+      await deleteBmsIncident(id)
+      setIncidents(prev => prev.filter(i => i.id !== id))
+      toast.success('Incidencia eliminada')
+    } catch { toast.error('No se pudo eliminar.') }
   }
 
   async function resolveIncident(inc: BmsIncident) {
-    const saved = await upsertBmsIncident({ ...inc, status: 'resolved', resolved_at: new Date().toISOString() })
-    setIncidents(prev => prev.map(i => i.id === inc.id ? saved : i))
+    try {
+      const saved = await upsertBmsIncident({ ...inc, status: 'resolved', resolved_at: new Date().toISOString() })
+      setIncidents(prev => prev.map(i => i.id === inc.id ? saved : i))
+      toast.success('Incidencia resuelta')
+    } catch { toast.error('Error al resolver la incidencia.') }
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando BMS...</div>
+  if (loading) return <PageLoading rows={5} />
 
   return (
     <div className="p-5 space-y-4">

@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Trash2, Edit2, Search, FileDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { getCominIonJobs, upsertCominIonJob, deleteCominIonJob, getWorkers } from '@/lib/supabase'
 import type { CominIonJob, TeamMember } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, formatCurrency, formatDateShort, todayIso } from '@/lib/utils'
+import { PageLoading } from '@/components/Skeleton'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -122,9 +126,10 @@ function generateExternalPDF(jobs: CominIonJob[], contactName: string, contactPh
 }
 
 export default function CominIonPage() {
-  const [jobs, setJobs] = useState<CominIonJob[]>([])
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { data: jobs, setData: setJobs, loading } = useRealtimeTable('comin_ion_jobs', getCominIonJobs)
   const [workers, setWorkers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [showDialog, setShowDialog] = useState(false)
@@ -137,9 +142,7 @@ export default function CominIonPage() {
   const [pdfFilter, setPdfFilter] = useState<'ion' | 'pending' | 'all'>('pending')
 
   useEffect(() => {
-    Promise.all([getCominIonJobs(), getWorkers()])
-      .then(([j, w]) => { setJobs(j); setWorkers(w) })
-      .finally(() => setLoading(false))
+    getWorkers().then(setWorkers)
   }, [])
 
   const filtered = jobs.filter(j =>
@@ -169,16 +172,21 @@ export default function CominIonPage() {
       const withR = { ...saved, internal_responsible: workers.find(w => w.id === saved.internal_responsible_id) }
       setJobs(prev => selected ? prev.map(j => j.id === selected.id ? withR : j) : [withR, ...prev])
       setShowDialog(false)
-    } catch { alert('Error al guardar.') } finally { setSaving(false) }
+      toast.success(selected ? 'Trabajo actualizado' : 'Trabajo creado')
+    } catch { toast.error('Error al guardar.') } finally { setSaving(false) }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('¿Eliminar este trabajo?')) return
-    try { await deleteCominIonJob(id); setJobs(prev => prev.filter(j => j.id !== id)) }
-    catch { alert('No se pudo eliminar.') }
+    const ok = await confirm({ title: 'Eliminar trabajo', message: '¿Eliminar este trabajo COMIN/IOM?' })
+    if (!ok) return
+    try {
+      await deleteCominIonJob(id)
+      setJobs(prev => prev.filter(j => j.id !== id))
+      toast.success('Trabajo eliminado')
+    } catch { toast.error('No se pudo eliminar.') }
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando trabajos COMIN/IOM...</div>
+  if (loading) return <PageLoading rows={5} />
 
   return (
     <div className="p-5 space-y-4">

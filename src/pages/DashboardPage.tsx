@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ClipboardList, AlertCircle, Clock, CheckCircle2, Euro, Calendar, Users, BarChart2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { getDashboardStats, getWorkerTaskStats, getMonthlyWorkerReport } from '@/lib/supabase'
+import { getDashboardStats, getWorkerTaskStats, getMonthlyWorkerReport, supabase } from '@/lib/supabase'
+import { SkeletonKpis, SkeletonCard } from '@/components/Skeleton'
 import type { DashboardStats, WorkerTaskStats, TeamMember } from '@/types'
 import { cn, STATUS_CLASSES, STATUS_LABELS, PRIORITY_CLASSES, PRIORITY_LABELS, formatCurrency, todayIso, getInitials } from '@/lib/utils'
 import { useNavigate } from 'react-router-dom'
@@ -17,10 +18,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
   const today = todayIso()
+  const todayRef = useRef(today)
+  todayRef.current = today
 
-  useEffect(() => {
-    Promise.all([
-      getDashboardStats(today),
+  function loadAll() {
+    return Promise.all([
+      getDashboardStats(todayRef.current),
       getWorkerTaskStats(),
       getMonthlyWorkerReport(6),
     ]).then(([s, ws, monthly]) => {
@@ -28,8 +31,23 @@ export default function DashboardPage() {
       setWorkerStats(ws)
       setMonthlyTasks(monthly.tasks)
       setMonthlyWorkers(monthly.workers)
-    }).finally(() => setLoading(false))
-  }, [today])
+    })
+  }
+
+  useEffect(() => {
+    loadAll().finally(() => setLoading(false))
+
+    const channel = supabase
+      .channel('rt-dashboard')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'tasks' }, () => { loadAll() })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'general_repairs' }, () => { loadAll() })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const kpis = stats ? [
     { label: 'Pendientes hoy', value: stats.pending, icon: <Clock size={18} />, color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-50 dark:bg-slate-700', border: 'border-gray-200 dark:border-slate-600' },
@@ -58,7 +76,12 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-gray-400 dark:text-slate-500">Cargando datos...</div>
+        <div className="space-y-4">
+          <SkeletonKpis count={5} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
+          </div>
+        </div>
       ) : (
         <>
           {/* KPIs */}

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Edit2, Phone, Mail, Search, Trash2, Building2, Users } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,11 +9,14 @@ import { Dialog } from '@/components/ui/dialog'
 import { getProviders, upsertProvider, deleteProvider } from '@/lib/supabase'
 import type { Provider } from '@/types'
 import { cn } from '@/lib/utils'
+import { PageLoading } from '@/components/Skeleton'
 
 type ProviderTab = 'all' | 'providers' | 'contacts'
 type FormType = 'proveedor' | 'contacto'
 
 export default function ProvidersPage() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -75,24 +80,27 @@ export default function ProvidersPage() {
         : [...prev, saved]
       )
       setShowDialog(false)
+      toast.success(selected ? 'Actualizado correctamente' : 'Creado correctamente')
     } catch {
-      alert('Error al guardar.')
+      toast.error('Error al guardar.')
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(p: Provider) {
-    if (!confirm(`¿Eliminar ${p.name}?`)) return
+    const ok = await confirm({ title: `Eliminar ${formType === 'contacto' ? 'contacto' : 'proveedor'}`, message: `¿Eliminar "${p.name}"?` })
+    if (!ok) return
     try {
       await deleteProvider(p.id)
       setProviders(prev => prev.filter(x => x.id !== p.id))
+      toast.success('Eliminado correctamente')
     } catch {
-      alert('No se pudo eliminar.')
+      toast.error('No se pudo eliminar.')
     }
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando proveedores y contactos...</div>
+  if (loading) return <PageLoading rows={5} />
 
   return (
     <div className="p-5 space-y-4">

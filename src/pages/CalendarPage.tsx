@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -12,6 +15,7 @@ import { Plus, Filter, Trash2, Save, CheckCircle2, Calendar, List, Clock, AlertC
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import type { Task, TeamMember, Area } from '@/types'
+import { PageLoading } from '@/components/Skeleton'
 
 function buildCalendarEvents(tasks: Task[]) {
   return tasks.map(task => {
@@ -37,10 +41,11 @@ const EMPTY_FORM: Partial<Task> = {
 }
 
 export default function CalendarPage() {
-  const [tasks, setTasks] = useState<Task[]>([])
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { data: tasks, setData: setTasks, loading } = useRealtimeTable('tasks', () => getTasks({ is_personal: false }))
   const [workers, setWorkers] = useState<TeamMember[]>([])
   const [areas, setAreas] = useState<Area[]>([])
-  const [loading, setLoading] = useState(true)
   const [filterMember, setFilterMember] = useState<number | undefined>()
   const [showDialog, setShowDialog] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
@@ -51,15 +56,7 @@ export default function CalendarPage() {
   const [listFilter, setListFilter] = useState('')
 
   useEffect(() => {
-    Promise.all([
-      getTasks({ is_personal: false }),
-      getWorkers(),
-      getAreas(),
-    ]).then(([t, w, a]) => {
-      setTasks(t)
-      setWorkers(w)
-      setAreas(a)
-    }).finally(() => setLoading(false))
+    Promise.all([getWorkers(), getAreas()]).then(([w, a]) => { setWorkers(w); setAreas(a) })
   }, [])
 
   const events = buildCalendarEvents(tasks).filter(e =>
@@ -92,8 +89,9 @@ export default function CalendarPage() {
       )
       setShowDialog(false)
       setForm(EMPTY_FORM)
+      toast.success(form.id ? 'Tarea actualizada' : 'Tarea creada')
     } catch {
-      alert('Error al guardar la tarea.')
+      toast.error('Error al guardar la tarea.')
     } finally {
       setSaving(false)
     }
@@ -107,19 +105,22 @@ export default function CalendarPage() {
         : t
       ))
       setShowDetail(false)
+      toast.success('Tarea completada')
     } catch {
-      alert('Error al completar.')
+      toast.error('Error al completar la tarea.')
     }
   }
 
   async function handleDelete(task: Task) {
-    if (!confirm(`¿Eliminar "${task.title}"?`)) return
+    const ok = await confirm({ title: 'Eliminar tarea', message: `¿Eliminar "${task.title}"?` })
+    if (!ok) return
     try {
       await deleteTask(task.id)
       setTasks(prev => prev.filter(t => t.id !== task.id))
       setShowDetail(false)
+      toast.success('Tarea eliminada')
     } catch {
-      alert('Error al eliminar.')
+      toast.error('Error al eliminar la tarea.')
     }
   }
 
@@ -129,7 +130,7 @@ export default function CalendarPage() {
     setShowDialog(true)
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando calendario...</div>
+  if (loading) return <PageLoading rows={4} />
 
   const taskStats = {
     pending: tasks.filter(t => t.status === 'pending').length,

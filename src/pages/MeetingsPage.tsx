@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Trash2, Edit2, FileText, CheckSquare, Square, ChevronDown, ChevronUp, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { getMeetings, upsertMeeting, deleteMeeting, getWorkers } from '@/lib/supabase'
 import type { Meeting, MeetingPoint, MeetingDepartment, TeamMember } from '@/types'
 import { cn, formatDateShort, todayIso } from '@/lib/utils'
+import { PageLoading } from '@/components/Skeleton'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -112,9 +116,10 @@ function generateMeetingPDF(meeting: Meeting, workers: TeamMember[]) {
 }
 
 export default function MeetingsPage() {
-  const [meetings, setMeetings] = useState<Meeting[]>([])
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { data: meetings, setData: setMeetings, loading } = useRealtimeTable('meetings', getMeetings)
   const [workers, setWorkers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
   const [filterDept, setFilterDept] = useState<MeetingDepartment | ''>('')
   const [expanded, setExpanded] = useState<number | null>(null)
   const [showDialog, setShowDialog] = useState(false)
@@ -123,9 +128,7 @@ export default function MeetingsPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    Promise.all([getMeetings(), getWorkers()])
-      .then(([m, w]) => { setMeetings(m); setWorkers(w) })
-      .finally(() => setLoading(false))
+    getWorkers().then(setWorkers)
   }, [])
 
   const filtered = filterDept ? meetings.filter(m => m.department === filterDept) : meetings
@@ -155,15 +158,20 @@ export default function MeetingsPage() {
         : [withCreator, ...prev]
       )
       setShowDialog(false)
-    } catch { alert('Error al guardar.') }
+      toast.success(selected ? 'Reunión actualizada' : 'Reunión creada')
+    } catch { toast.error('Error al guardar.') }
     finally { setSaving(false) }
   }
 
   async function handleDelete(id: number, e: React.MouseEvent) {
     e.stopPropagation()
-    if (!confirm('¿Eliminar esta reunión?')) return
-    try { await deleteMeeting(id); setMeetings(prev => prev.filter(m => m.id !== id)) }
-    catch { alert('No se pudo eliminar.') }
+    const ok = await confirm({ title: 'Eliminar reunión', message: '¿Eliminar esta reunión y sus actas?' })
+    if (!ok) return
+    try {
+      await deleteMeeting(id)
+      setMeetings(prev => prev.filter(m => m.id !== id))
+      toast.success('Reunión eliminada')
+    } catch { toast.error('No se pudo eliminar.') }
   }
 
   async function togglePoint(meeting: Meeting, pointId: string) {
@@ -185,7 +193,7 @@ export default function MeetingsPage() {
     setForm(f => ({ ...f, agenda: (f.agenda ?? []).map(p => p.id === id ? { ...p, [field]: value } : p) }))
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando reuniones...</div>
+  if (loading) return <PageLoading rows={4} />
 
   return (
     <div className="p-4 sm:p-5 space-y-4">

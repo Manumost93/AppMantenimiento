@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Search, Wrench, CheckCircle2, Clock, AlertCircle, Edit2, Trash2, Eye, Camera } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,12 +10,14 @@ import { getRepairs, upsertRepair, deleteRepair, getWorkers, getAreas, patchRepa
 import type { GeneralRepair, TeamMember, Area } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, PRIORITY_LABELS, PRIORITY_CLASSES, formatCurrency, formatDateShort, todayIso, getInitials } from '@/lib/utils'
 import PhotoUpload from '@/components/PhotoUpload'
+import { PageLoading } from '@/components/Skeleton'
 
 export default function RepairsPage() {
-  const [repairs, setRepairs] = useState<GeneralRepair[]>([])
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { data: repairs, setData: setRepairs, loading } = useRealtimeTable('general_repairs', getRepairs)
   const [workers, setWorkers] = useState<TeamMember[]>([])
   const [areas, setAreas] = useState<Area[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterMember, setFilterMember] = useState('')
@@ -25,9 +30,7 @@ export default function RepairsPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    Promise.all([getRepairs(), getWorkers(), getAreas()])
-      .then(([r, w, a]) => { setRepairs(r); setWorkers(w); setAreas(a) })
-      .finally(() => setLoading(false))
+    Promise.all([getWorkers(), getAreas()]).then(([w, a]) => { setWorkers(w); setAreas(a) })
   }, [])
 
   const filtered = repairs.filter(r =>
@@ -88,8 +91,9 @@ export default function RepairsPage() {
       }
       setRepairs(prev => selected ? prev.map(r => r.id === selected.id ? withRelations : r) : [withRelations, ...prev])
       setShowDialog(false)
+      toast.success(selected ? 'Reparación actualizada' : 'Reparación creada')
     } catch {
-      alert('Error al guardar.')
+      toast.error('Error al guardar la reparación.')
     } finally {
       setSaving(false)
     }
@@ -97,17 +101,19 @@ export default function RepairsPage() {
 
   async function handleDelete(id: number, e?: React.MouseEvent) {
     e?.stopPropagation()
-    if (!confirm('¿Eliminar esta reparación?')) return
+    const ok = await confirm({ title: 'Eliminar reparación', message: '¿Eliminar esta reparación? Esta acción no se puede deshacer.' })
+    if (!ok) return
     try {
       await deleteRepair(id)
       setRepairs(prev => prev.filter(r => r.id !== id))
       setShowDetail(false)
+      toast.success('Reparación eliminada')
     } catch {
-      alert('No se pudo eliminar.')
+      toast.error('No se pudo eliminar.')
     }
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400 dark:text-slate-500">Cargando reparaciones...</div>
+  if (loading) return <PageLoading kpis={4} rows={5} />
 
   return (
     <div className="p-5 space-y-4">
@@ -448,14 +454,20 @@ export default function RepairsPage() {
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Coste material (€)</label>
             <input type="number" min="0" step="0.01" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.material_cost || 0}
-              onChange={e => setForm(f => ({ ...f, material_cost: Number(e.target.value) }))} />
+              onChange={e => setForm(f => { const mat = Number(e.target.value); return { ...f, material_cost: mat, total_cost: mat + (f.labor_cost || 0) } })} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Coste mano de obra (€)</label>
             <input type="number" min="0" step="0.01" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.labor_cost || 0}
-              onChange={e => setForm(f => ({ ...f, labor_cost: Number(e.target.value) }))} />
+              onChange={e => setForm(f => { const lab = Number(e.target.value); return { ...f, labor_cost: lab, total_cost: (f.material_cost || 0) + lab } })} />
           </div>
+          {((form.material_cost || 0) + (form.labor_cost || 0)) > 0 && (
+            <div className="col-span-full bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg px-3 py-2 flex items-center justify-between">
+              <span className="text-xs text-blue-700 dark:text-blue-300">Coste total estimado</span>
+              <span className="text-sm font-bold text-blue-700 dark:text-blue-300">{formatCurrency((form.material_cost || 0) + (form.labor_cost || 0))}</span>
+            </div>
+          )}
           <div className="col-span-full">
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Descripción del trabajo *</label>
             <textarea className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-slate-700 dark:text-white" rows={3}

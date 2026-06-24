@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Settings, Plus, Edit2, Trash2, Key, Info, Shield, Lock, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,6 +13,8 @@ import { cn } from '@/lib/utils'
 type Tab = 'sections' | 'pin' | 'security' | 'about'
 
 export default function SettingsPage() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const { worker, isAdmin } = useAuth()
 
   if (!isAdmin) {
@@ -71,13 +75,18 @@ export default function SettingsPage() {
       const withManager = { ...saved, manager: workers.find(w => w.id === saved.manager_id) }
       setAreas(prev => selectedArea ? prev.map(a => a.id === selectedArea.id ? withManager : a) : [...prev, withManager])
       setShowAreaDialog(false)
-    } catch { alert('Error al guardar.') } finally { setSavingArea(false) }
+      toast.success(selectedArea ? 'Sección actualizada' : 'Sección creada')
+    } catch { toast.error('Error al guardar.') } finally { setSavingArea(false) }
   }
 
   async function handleDeleteArea(a: Area) {
-    if (!confirm(`¿Eliminar la sección "${a.name}"? Las tareas asociadas quedarán sin sección.`)) return
-    try { await deleteArea(a.id); setAreas(prev => prev.filter(x => x.id !== a.id)) }
-    catch { alert('No se pudo eliminar. Puede tener datos asociados.') }
+    const ok = await confirm({ title: 'Eliminar sección', message: `¿Eliminar la sección "${a.name}"? Las tareas asociadas quedarán sin sección.` })
+    if (!ok) return
+    try {
+      await deleteArea(a.id)
+      setAreas(prev => prev.filter(x => x.id !== a.id))
+      toast.success('Sección eliminada')
+    } catch { toast.error('No se pudo eliminar. Puede tener datos asociados.') }
   }
 
   // ── PIN ─────────────────────────────────────────────────────────────────────
@@ -294,7 +303,8 @@ export default function SettingsPage() {
                 className="border-red-200 text-red-600 hover:bg-red-50 w-full"
                 disabled={resettingPins}
                 onClick={async () => {
-                  if (!confirm('¿Seguro? Todos los compañeros tendrán que crear un nuevo PIN la próxima vez que accedan.')) return
+                  const ok = await confirm({ title: 'Reiniciar todos los PINs', message: '¿Seguro? Todos los compañeros tendrán que crear un nuevo PIN la próxima vez que accedan.', confirmLabel: 'Sí, reiniciar', danger: true })
+                  if (!ok) return
                   setResettingPins(true)
                   setResetMsg('')
                   try {

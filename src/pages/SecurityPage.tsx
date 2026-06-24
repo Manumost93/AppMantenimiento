@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Search, Edit2, Trash2, Shield, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { getSecurityIncidents, upsertSecurityIncident, deleteSecurityIncident, getWorkers } from '@/lib/supabase'
 import type { SecurityIncident, SecurityIncidentType, TeamMember } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, PRIORITY_LABELS, PRIORITY_CLASSES, formatDateShort, todayIso } from '@/lib/utils'
+import { PageLoading } from '@/components/Skeleton'
 
 const INCIDENT_TYPES: Record<SecurityIncidentType, string> = {
   antiintrusion: 'Antiintrusión / Alarma',
@@ -29,9 +33,10 @@ const TYPE_ICONS: Record<SecurityIncidentType, string> = {
 }
 
 export default function SecurityPage() {
-  const [incidents, setIncidents] = useState<SecurityIncident[]>([])
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { data: incidents, setData: setIncidents, loading } = useRealtimeTable('security_incidents', getSecurityIncidents)
   const [workers, setWorkers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterType, setFilterType] = useState('')
@@ -43,9 +48,7 @@ export default function SecurityPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    Promise.all([getSecurityIncidents(), getWorkers()])
-      .then(([inc, w]) => { setIncidents(inc); setWorkers(w) })
-      .finally(() => setLoading(false))
+    getWorkers().then(setWorkers)
   }, [])
 
   const filtered = incidents.filter(i =>
@@ -81,14 +84,19 @@ export default function SecurityPage() {
       const withR = { ...saved, internal_responsible: workers.find(w => w.id === saved.internal_responsible_id) }
       setIncidents(prev => selected ? prev.map(i => i.id === selected.id ? withR : i) : [withR, ...prev])
       setShowDialog(false)
-    } catch { alert('Error al guardar.') }
+      toast.success(selected ? 'Incidencia actualizada' : 'Incidencia creada')
+    } catch { toast.error('Error al guardar.') }
     finally { setSaving(false) }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('¿Eliminar esta incidencia?')) return
-    try { await deleteSecurityIncident(id); setIncidents(prev => prev.filter(i => i.id !== id)) }
-    catch { alert('No se pudo eliminar.') }
+    const ok = await confirm({ title: 'Eliminar incidencia', message: '¿Eliminar esta incidencia de seguridad?' })
+    if (!ok) return
+    try {
+      await deleteSecurityIncident(id)
+      setIncidents(prev => prev.filter(i => i.id !== id))
+      toast.success('Incidencia eliminada')
+    } catch { toast.error('No se pudo eliminar.') }
   }
 
   async function handleQuickDone(incident: SecurityIncident) {
@@ -98,10 +106,11 @@ export default function SecurityPage() {
         ? { ...saved, internal_responsible: workers.find(w => w.id === saved.internal_responsible_id) }
         : i
       ))
-    } catch { alert('Error al completar.') }
+      toast.success('Incidencia completada')
+    } catch { toast.error('Error al completar.') }
   }
 
-  if (loading) return <div className="p-5 text-center text-gray-400">Cargando seguridad...</div>
+  if (loading) return <PageLoading kpis={4} rows={5} />
 
   return (
     <div className="p-5 space-y-4">

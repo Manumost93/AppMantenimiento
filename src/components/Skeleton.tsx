@@ -1,5 +1,14 @@
 import { cn } from '@/lib/utils'
 
+export function PageLoading({ kpis = 0, rows = 4 }: { kpis?: number; rows?: number }) {
+  return (
+    <div className="p-5 space-y-4">
+      {kpis > 0 && <SkeletonKpis count={kpis} />}
+      <SkeletonTable rows={rows} />
+    </div>
+  )
+}
+
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('animate-pulse bg-gray-200 dark:bg-slate-700 rounded', className)} />
 }

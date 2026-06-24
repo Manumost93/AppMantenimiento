@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Trash2, Edit2, Search, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -105,9 +108,10 @@ export default function KonePage() {
   const [savingEquip, setSavingEquip] = useState<string | null>(null)
 
   // ── Incidents state ──────────────────────────────────────────────────────
-  const [incidents, setIncidents] = useState<KoneIncident[]>([])
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { data: incidents, setData: setIncidents, loading } = useRealtimeTable('kone_incidents', getKoneIncidents)
   const [workers, setWorkers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [showDialog, setShowDialog] = useState(false)
@@ -117,9 +121,7 @@ export default function KonePage() {
 
   // Initial loads
   useEffect(() => {
-    Promise.all([getKoneIncidents(), getWorkers()])
-      .then(([i, w]) => { setIncidents(i); setWorkers(w) })
-      .finally(() => setLoading(false))
+    getWorkers().then(setWorkers)
   }, [])
 
   const loadMonthlyChecks = useCallback(async () => {
@@ -162,7 +164,7 @@ export default function KonePage() {
         await deleteKoneMonthlyCheck(current.id)
         setMonthlyChecks(prev => prev.filter(c => c.equipment_id !== equipId))
       }
-    } catch { alert('Error al guardar') } finally {
+    } catch { toast.error('Error al guardar el estado.') } finally {
       setSavingEquip(null)
     }
   }
@@ -194,13 +196,18 @@ export default function KonePage() {
       const withRelations = { ...saved, internal_responsible: workers.find(w => w.id === saved.internal_responsible_id) }
       setIncidents(prev => selected ? prev.map(i => i.id === selected.id ? withRelations : i) : [withRelations, ...prev])
       setShowDialog(false)
-    } catch { alert('Error al guardar.') } finally { setSaving(false) }
+      toast.success(selected ? 'Incidencia actualizada' : 'Incidencia creada')
+    } catch { toast.error('Error al guardar.') } finally { setSaving(false) }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('¿Eliminar esta incidencia?')) return
-    try { await deleteKoneIncident(id); setIncidents(prev => prev.filter(i => i.id !== id)) }
-    catch { alert('No se pudo eliminar.') }
+    const ok = await confirm({ title: 'Eliminar incidencia', message: '¿Eliminar esta incidencia KONE?' })
+    if (!ok) return
+    try {
+      await deleteKoneIncident(id)
+      setIncidents(prev => prev.filter(i => i.id !== id))
+      toast.success('Incidencia eliminada')
+    } catch { toast.error('No se pudo eliminar.') }
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -443,12 +450,12 @@ export default function KonePage() {
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Coste piezas (€)</label>
             <input type="number" min="0" step="0.01" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
-              value={form.part_cost || 0} onChange={e => setForm(f => ({ ...f, part_cost: Number(e.target.value) }))} />
+              value={form.part_cost || 0} onChange={e => setForm(f => { const p = Number(e.target.value); return { ...f, part_cost: p, total_cost: p + (f.labor_cost || 0) } })} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Coste mano obra (€)</label>
             <input type="number" min="0" step="0.01" className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
-              value={form.labor_cost || 0} onChange={e => setForm(f => ({ ...f, labor_cost: Number(e.target.value) }))} />
+              value={form.labor_cost || 0} onChange={e => setForm(f => { const l = Number(e.target.value); return { ...f, labor_cost: l, total_cost: (f.part_cost || 0) + l } })} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Prioridad</label>

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { useToast } from '@/contexts/ToastContext'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { Plus, Trash2, Edit2, Star, StarOff, Phone, Package, StickyNote, Calendar, ClipboardList, ShoppingCart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -32,6 +34,8 @@ const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
 const NOTE_COLORS = ['#FEF9C3', '#DCFCE7', '#DBEAFE', '#FCE7F3', '#F3E8FF', '#FFE4E1']
 
 export default function MyAreaPage() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const { worker } = useAuth()
   const [tab, setTab] = useState<Tab>('tasks')
 
@@ -93,13 +97,18 @@ export default function MyAreaPage() {
       setTasks(prev => selectedTask ? prev.map(t => t.id === selectedTask.id ? saved : t) : [saved, ...prev])
       setShowTaskDialog(false)
       setSelectedTask(null)
-    } catch { alert('Error al guardar.') } finally { setSavingTask(false) }
+      toast.success(selectedTask ? 'Tarea actualizada' : 'Tarea creada')
+    } catch { toast.error('Error al guardar.') } finally { setSavingTask(false) }
   }
 
   async function removeTask(id: number) {
-    if (!confirm('¿Eliminar esta tarea?')) return
-    try { await deleteTask(id); setTasks(prev => prev.filter(t => t.id !== id)) }
-    catch { alert('Error al eliminar.') }
+    const ok = await confirm({ title: 'Eliminar tarea', message: '¿Eliminar esta tarea personal?' })
+    if (!ok) return
+    try {
+      await deleteTask(id)
+      setTasks(prev => prev.filter(t => t.id !== id))
+      toast.success('Tarea eliminada')
+    } catch { toast.error('Error al eliminar.') }
   }
 
   // ── Notas ───────────────────────────────────────────────────────────────────
@@ -111,12 +120,16 @@ export default function MyAreaPage() {
       setNotes(prev => selectedNote ? prev.map(n => n.id === selectedNote.id ? saved : n) : [saved, ...prev])
       setShowNoteDialog(false)
       setSelectedNote(null)
-    } catch { alert('Error al guardar.') }
+      toast.success(selectedNote ? 'Nota actualizada' : 'Nota guardada')
+    } catch { toast.error('Error al guardar.') }
   }
 
   async function removeNote(id: number) {
-    try { await deletePersonalNote(id); setNotes(prev => prev.filter(n => n.id !== id)) }
-    catch { alert('Error al eliminar.') }
+    try {
+      await deletePersonalNote(id)
+      setNotes(prev => prev.filter(n => n.id !== id))
+      toast.success('Nota eliminada')
+    } catch { toast.error('Error al eliminar.') }
   }
 
   // ── Materiales ───────────────────────────────────────────────────────────────
@@ -128,12 +141,16 @@ export default function MyAreaPage() {
       setMaterials(prev => selectedMaterial ? prev.map(m => m.id === selectedMaterial.id ? saved : m) : [saved, ...prev])
       setShowMaterialDialog(false)
       setSelectedMaterial(null)
-    } catch { alert('Error al guardar.') }
+      toast.success(selectedMaterial ? 'Material actualizado' : 'Material añadido')
+    } catch { toast.error('Error al guardar.') }
   }
 
   async function removeMaterial(id: number) {
-    try { await deleteMaterialRequest(id); setMaterials(prev => prev.filter(m => m.id !== id)) }
-    catch { alert('Error al eliminar.') }
+    try {
+      await deleteMaterialRequest(id)
+      setMaterials(prev => prev.filter(m => m.id !== id))
+      toast.success('Material eliminado')
+    } catch { toast.error('Error al eliminar.') }
   }
 
   // ── Proveedores favoritos ─────────────────────────────────────────────────────
@@ -149,7 +166,7 @@ export default function MyAreaPage() {
         await addFavoriteProvider(worker.id, provider.id)
         setFavProviders(prev => [...prev, provider])
       }
-    } catch { alert('Error.') }
+    } catch { toast.error('Error al actualizar favoritos.') }
   }
 
   // ── Calendar events ───────────────────────────────────────────────────────────

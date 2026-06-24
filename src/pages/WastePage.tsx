@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { useToast } from '@/contexts/ToastContext'
 import { Plus, Trash2, CheckCircle2, Clock, Truck, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -22,10 +24,10 @@ const STATUS_INFO = {
 }
 
 export default function WastePage() {
+  const toast = useToast()
   const { worker, isAdmin } = useAuth()
-  const [requests, setRequests] = useState<WasteRequest[]>([])
+  const { data: requests, setData: setRequests, loading } = useRealtimeTable('waste_requests', getWasteRequests)
   const [workers, setWorkers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<string>('')
   const [showDialog, setShowDialog] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
@@ -34,9 +36,7 @@ export default function WastePage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    Promise.all([getWasteRequests(), getWorkers()])
-      .then(([r, w]) => { setRequests(r); setWorkers(w) })
-      .finally(() => setLoading(false))
+    getWorkers().then(setWorkers)
   }, [])
 
   const filtered = filterStatus ? requests.filter(r => r.status === filterStatus) : requests
@@ -59,7 +59,8 @@ export default function WastePage() {
       const withCreator = { ...saved, created_by: workers.find(w => w.id === saved.created_by_id) }
       setRequests(prev => [withCreator, ...prev])
       setShowDialog(false)
-    } catch { alert('Error al guardar.') }
+      toast.success('Solicitud creada')
+    } catch { toast.error('Error al guardar.') }
     finally { setSaving(false) }
   }
 
@@ -74,7 +75,8 @@ export default function WastePage() {
         ? { ...updated, created_by: workers.find(w => w.id === updated.created_by_id) }
         : r
       ))
-    } catch { alert('Error al actualizar.') }
+      toast.success(newStatus === 'resolved' ? 'Solicitud resuelta' : 'Estado actualizado')
+    } catch { toast.error('Error al actualizar.') }
   }
 
   async function handleDelete() {
@@ -82,7 +84,8 @@ export default function WastePage() {
     try {
       await deleteWasteRequest(toDelete)
       setRequests(prev => prev.filter(r => r.id !== toDelete))
-    } catch { alert('No se pudo eliminar.') }
+      toast.success('Solicitud eliminada')
+    } catch { toast.error('No se pudo eliminar.') }
     finally { setShowConfirm(false); setToDelete(null) }
   }
 
