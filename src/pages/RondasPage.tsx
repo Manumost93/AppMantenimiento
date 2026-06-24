@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ClipboardCheck, Sun, Moon, ArrowLeft, ArrowRight, Check, Camera, FileDown, Pencil, History, Plus } from 'lucide-react'
+import { ClipboardCheck, Sun, Moon, ArrowLeft, ArrowRight, Check, Camera, FileDown, Pencil, History, Plus, Trash2, AlertTriangle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getRondas, upsertRonda, deleteRonda, getWorkers, uploadRondaPDF, patchRondaObservaciones } from '@/lib/supabase'
 import type { RondaEntry, TeamMember, TipoRonda } from '@/types'
@@ -154,19 +154,22 @@ async function extractNumberFromCanvas(
   mode: 'analog' | 'digital' = 'analog'
 ): Promise<string> {
   try {
-    const scale = mode === 'digital' ? 3 : 2
+    const scale = mode === 'digital' ? 4 : 3
+    const padPx = 20
     const offscreen = document.createElement('canvas')
-    offscreen.width = canvas.width * scale
-    offscreen.height = canvas.height * scale
+    offscreen.width = canvas.width * scale + padPx * 2
+    offscreen.height = canvas.height * scale + padPx * 2
     const ctx = offscreen.getContext('2d')!
+    ctx.fillStyle = 'white'
+    ctx.fillRect(0, 0, offscreen.width, offscreen.height)
     ctx.imageSmoothingEnabled = false
-    ctx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height)
+    ctx.drawImage(canvas, padPx, padPx, canvas.width * scale, canvas.height * scale)
 
     const imgData = ctx.getImageData(0, 0, offscreen.width, offscreen.height)
     const d = imgData.data
 
     if (mode === 'digital') {
-      // Grayscale → Otsu binarize → auto-invert if needed
+      // Grayscale → Otsu binarize → auto-invert if background is dark
       const grays: number[] = []
       for (let i = 0; i < d.length; i += 4)
         grays.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2])
@@ -177,16 +180,15 @@ async function extractNumberFromCanvas(
         d[i] = d[i + 1] = d[i + 2] = v
         if (v === 0) blacks++
       }
-      // Invert if background is dark (>60% black pixels → light-on-dark display)
       if (blacks / (d.length / 4) > 0.6) {
         for (let i = 0; i < d.length; i += 4)
           d[i] = d[i + 1] = d[i + 2] = 255 - d[i]
       }
     } else {
-      // Analog: grayscale + contrast boost
+      // Analog: aggressive contrast stretch [50,200] → [0,255]
       for (let i = 0; i < d.length; i += 4) {
         const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-        const v = gray < 128 ? Math.max(0, gray - 40) : Math.min(255, gray + 40)
+        const v = Math.min(255, Math.max(0, ((gray - 50) / 150) * 255))
         d[i] = d[i + 1] = d[i + 2] = v
       }
     }
@@ -199,10 +201,23 @@ async function extractNumberFromCanvas(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       tessedit_pageseg_mode: 7 as any,
     })
-    const { data: { text } } = await tWorker.recognize(offscreen)
+    let { data: { text, confidence } } = await tWorker.recognize(offscreen)
+    let clean = text.replace(/[^0-9.]/g, '').replace(/\.{2,}/g, '.').replace(/^\./, '').replace(/\.$/, '')
+
+    // Low confidence or empty → retry with PSM 8 (single word)
+    if (confidence < 40 || !clean) {
+      await tWorker.setParameters({
+        tessedit_char_whitelist: '0123456789.',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tessedit_pageseg_mode: 8 as any,
+      })
+      const { data: { text: t2 } } = await tWorker.recognize(offscreen)
+      const clean2 = t2.replace(/[^0-9.]/g, '').replace(/\.{2,}/g, '.').replace(/^\./, '').replace(/\.$/, '')
+      if (clean2.length > clean.length) clean = clean2
+    }
+
     await tWorker.terminate()
-    const clean = text.replace(/[^0-9.]/g, '').replace(/\.{2,}/g, '.')
-    return clean.replace(/^\./, '').replace(/\.$/, '')
+    return clean
   } catch {
     return ''
   }
@@ -222,6 +237,7 @@ function CameraCapture({ label, desc, unit, value, onChange, defaultMode = 'anal
   const [starting, setStarting] = useState(false)
   const [ready, setReady] = useState(false)
   const [ocrRunning, setOcrRunning] = useState(false)
+  const [ocrFailed, setOcrFailed] = useState(false)
   const [counterMode, setCounterMode] = useState<'analog' | 'digital'>(defaultMode)
 
   useEffect(() => {
@@ -236,7 +252,7 @@ function CameraCapture({ label, desc, unit, value, onChange, defaultMode = 'anal
   }, [])
 
   async function openCam() {
-    setErr(''); setReady(false); setStarting(true)
+    setErr(''); setReady(false); setStarting(true); setOcrFailed(false)
     try {
       streamRef.current?.getTracks().forEach(t => t.stop())
       const s = await navigator.mediaDevices.getUserMedia({
@@ -276,8 +292,14 @@ function CameraCapture({ label, desc, unit, value, onChange, defaultMode = 'anal
     stopCam()
     // Auto-OCR: detect number and fill input
     setOcrRunning(true)
+    setOcrFailed(false)
     extractNumberFromCanvas(canvas, counterMode).then(detected => {
-      if (detected) onChange(detected)
+      if (detected) {
+        onChange(detected)
+        setOcrFailed(false)
+      } else {
+        setOcrFailed(true)
+      }
     }).finally(() => setOcrRunning(false))
   }
 
@@ -369,6 +391,13 @@ function CameraCapture({ label, desc, unit, value, onChange, defaultMode = 'anal
         </p>
       )}
 
+      {ocrFailed && !ocrRunning && photo && (
+        <p className="text-xs text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-2 border border-orange-200 dark:border-orange-800 flex items-center gap-1.5">
+          <AlertTriangle size={12} />
+          No se detectó el número. Escríbelo manualmente abajo, o repite la foto con mejor luz y encuadre.
+        </p>
+      )}
+
       {/* Input del valor — siempre visible, se rellena automáticamente tras la foto */}
       <div className={photo ? 'ring-2 ring-emerald-400 rounded-xl' : ''}>
         <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
@@ -376,6 +405,8 @@ function CameraCapture({ label, desc, unit, value, onChange, defaultMode = 'anal
             ? '🔍 Leyendo número automáticamente...'
             : (photo && value)
             ? '✓ Número detectado — corrige si es necesario'
+            : ocrFailed
+            ? <span className="text-orange-600 dark:text-orange-400">Escribe el valor manualmente</span>
             : <>Valor del contador — <span className="text-blue-600 dark:text-blue-400">{label}</span> <span className="text-gray-400 font-normal">({unit})</span></>
           }
         </label>
@@ -569,6 +600,9 @@ export default function RondasPage() {
   const [workers, setWorkers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const [showHistory, setShowHistory] = useState(false)
+  const [histDays, setHistDays] = useState<7 | 30 | 'all'>(7)
+  const [editingRonda, setEditingRonda] = useState<RondaEntry | null>(null)
+  const [editForm, setEditForm] = useState<Record<string, string>>({})
 
   useEffect(() => {
     Promise.all([getRondas(), getWorkers()])
@@ -638,6 +672,62 @@ export default function RondasPage() {
     if (!confirm('¿Eliminar esta ronda?')) return
     try { await deleteRonda(id); setRondas(prev => prev.filter(r => r.id !== id)) }
     catch { alert('No se pudo eliminar.') }
+  }
+
+  function openEdit(r: RondaEntry) {
+    let obs: Record<string, unknown> = {}
+    try { obs = JSON.parse(r.observaciones ?? '{}') } catch {}
+    setEditForm({
+      electricidad: r.lectura_luz != null ? String(r.lectura_luz) : '',
+      agua_comercial: r.lectura_agua != null ? String(r.lectura_agua) : '',
+      agua_pci: String(obs.agua_pci ?? ''),
+      pci_jockey: r.arranques_jockey != null ? String(r.arranques_jockey) : '',
+      compresor: r.arranques_compresor != null ? String(r.arranques_compresor) : '',
+    })
+    setEditingRonda(r)
+  }
+
+  async function handleEditSave() {
+    if (!editingRonda) return
+    setSaving(true)
+    try {
+      let obs: Record<string, unknown> = {}
+      try { obs = JSON.parse(editingRonda.observaciones ?? '{}') } catch {}
+      const updated = await upsertRonda({
+        ...editingRonda,
+        lectura_luz: editForm.electricidad ? Number(editForm.electricidad) : undefined,
+        lectura_agua: editForm.agua_comercial ? Number(editForm.agua_comercial) : undefined,
+        arranques_jockey: editForm.pci_jockey ? Number(editForm.pci_jockey) : undefined,
+        arranques_compresor: editForm.compresor ? Number(editForm.compresor) : undefined,
+        observaciones: JSON.stringify({ ...obs, agua_pci: editForm.agua_pci }),
+      })
+      const withWorker = { ...updated, worker: workers.find(w => w.id === updated.worker_id) }
+      setRondas(prev => prev.map(r => r.id === updated.id ? withWorker : r))
+      setEditingRonda(null)
+    } catch {
+      alert('Error al guardar los cambios.')
+    } finally { setSaving(false) }
+  }
+
+  function rondaToForm(r: RondaEntry): WizardForm {
+    let obs: Record<string, unknown> = {}
+    try { obs = JSON.parse(r.observaciones ?? '{}') } catch {}
+    return {
+      tipo: r.tipo,
+      nombre: (obs.nombre as string) || r.worker?.name || '',
+      fecha: r.fecha,
+      hora_inicio: r.hora?.substring(0, 5) || '00:00',
+      hora_fin: (obs.hora_fin as string) || addHour(r.hora?.substring(0, 5) || '00:00'),
+      dia_semana: (obs.dia_semana as string) || '',
+      dia_mes: (obs.dia_mes as number) || new Date(r.fecha).getDate(),
+      semana_mes: (obs.semana_mes as number) || 1,
+      electricidad: r.lectura_luz != null ? String(r.lectura_luz) : '',
+      agua_pci: String(obs.agua_pci ?? ''),
+      agua_comercial: r.lectura_agua != null ? String(r.lectura_agua) : '',
+      pci_jockey: r.arranques_jockey != null ? String(r.arranques_jockey) : '',
+      compresor: r.arranques_compresor != null ? String(r.arranques_compresor) : '',
+      checks: Array.isArray(obs.checks) ? (obs.checks as CheckItem[]) : DEFAULT_CHECKS.map(c => ({ ...c })),
+    }
   }
 
   // ── Wizard rendering ────────────────────────────────────────────────────────
@@ -1065,71 +1155,163 @@ export default function RondasPage() {
 
       {/* Historial */}
       <div>
-        <button
-          onClick={() => setShowHistory(h => !h)}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white mb-3"
-        >
-          <History size={15} />
-          Historial de rondas ({rondas.length})
-          <span className="text-xs text-gray-400">{showHistory ? '▲' : '▼'}</span>
-        </button>
-        {showHistory && rondas.length > 0 && (
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden overflow-x-auto shadow-sm">
-            <table className="w-full text-xs min-w-[600px]">
-              <thead className="bg-gray-50 dark:bg-slate-700">
-                <tr>
-                  {['Fecha', 'Hora', 'Tipo', 'Responsable', 'Electricidad', 'Agua Com.', 'Jockey', 'Compresor', 'PDFs', 'Acciones'].map(h => (
-                    <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                {rondas.map(r => {
-                  const cfg = TIPO_CFG[r.tipo]
-                  return (
-                    <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
-                      <td className="px-3 py-2 text-gray-600 dark:text-slate-300">{r.fecha}</td>
-                      <td className="px-3 py-2 text-gray-600 dark:text-slate-300">{r.hora?.substring(0, 5)}</td>
-                      <td className="px-3 py-2"><span className={cn('font-medium', cfg.color)}>{cfg.label}</span></td>
-                      <td className="px-3 py-2">
-                        {r.worker ? (
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ backgroundColor: r.worker.color }}>{r.worker.name[0]}</div>
-                            <span className="text-gray-700 dark:text-slate-300">{r.worker.name.split(' ')[0]}</span>
-                          </div>
-                        ) : <span className="text-gray-400">—</span>}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.lectura_luz ?? '—'}</td>
-                      <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.lectura_agua ?? '—'}</td>
-                      <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.arranques_jockey ?? '—'}</td>
-                      <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.arranques_compresor ?? '—'}</td>
-                      <td className="px-3 py-2">
-                        {(() => {
-                          let obs: Record<string, unknown> = {}
-                          try { obs = JSON.parse(r.observaciones ?? '{}') } catch {}
-                          const urlF = obs.pdf_formulario_url as string | undefined
-                          const urlL = obs.pdf_lecturas_url as string | undefined
-                          return (urlF || urlL) ? (
-                            <div className="flex gap-1">
-                              {urlF && <a href={urlF} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 text-[10px] font-medium bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded whitespace-nowrap">Form.</a>}
-                              {urlL && <a href={urlL} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-800 text-[10px] font-medium bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 rounded whitespace-nowrap">Lect.</a>}
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <button
+            onClick={() => setShowHistory(h => !h)}
+            className="flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white"
+          >
+            <History size={15} />
+            Historial de rondas
+            <span className="text-xs text-gray-400">{showHistory ? '▲' : '▼'}</span>
+          </button>
+          {showHistory && (
+            <div className="flex items-center gap-1 text-xs">
+              {([7, 30, 'all'] as const).map(d => (
+                <button
+                  key={d}
+                  onClick={() => setHistDays(d)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg font-medium transition-colors border',
+                    histDays === d
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-blue-400'
+                  )}
+                >
+                  {d === 'all' ? 'Todo' : `${d}d`}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {showHistory && (() => {
+          const today = new Date(todayIso()).getTime()
+          const filtered = histDays === 'all'
+            ? rondas
+            : rondas.filter(r => (today - new Date(r.fecha).getTime()) / 86400000 <= histDays)
+          if (filtered.length === 0) return (
+            <p className="text-sm text-gray-400 dark:text-slate-500 text-center py-4">
+              No hay rondas en los últimos {histDays} días.
+            </p>
+          )
+          return (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden overflow-x-auto shadow-sm">
+              <table className="w-full text-xs min-w-[660px]">
+                <thead className="bg-gray-50 dark:bg-slate-700">
+                  <tr>
+                    {['Fecha', 'Tipo', 'Responsable', 'Electr.', 'Agua Com.', 'Agua PCI', 'Jockey', 'Compresor', 'PDFs', ''].map(h => (
+                      <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                  {filtered.map(r => {
+                    const cfg = TIPO_CFG[r.tipo]
+                    let obs: Record<string, unknown> = {}
+                    try { obs = JSON.parse(r.observaciones ?? '{}') } catch {}
+                    const urlF = obs.pdf_formulario_url as string | undefined
+                    const urlL = obs.pdf_lecturas_url as string | undefined
+                    return (
+                      <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+                        <td className="px-3 py-2 text-gray-600 dark:text-slate-300 whitespace-nowrap">{r.fecha}<br /><span className="text-gray-400 text-[10px]">{r.hora?.substring(0, 5)}</span></td>
+                        <td className="px-3 py-2"><span className={cn('font-semibold', cfg.color)}>{cfg.label}</span></td>
+                        <td className="px-3 py-2">
+                          {r.worker ? (
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ backgroundColor: r.worker.color }}>{r.worker.name[0]}</div>
+                              <span className="text-gray-700 dark:text-slate-300">{r.worker.name.split(' ')[0]}</span>
                             </div>
-                          ) : <span className="text-gray-300 dark:text-slate-600 text-[10px]">—</span>
-                        })()}
-                      </td>
-                      <td className="px-3 py-2">
-                        <button onClick={() => handleDelete(r.id)} className="text-gray-300 dark:text-slate-600 hover:text-red-500 p-1 rounded">
-                          <Pencil size={11} />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                          ) : <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.lectura_luz ?? '—'}</td>
+                        <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.lectura_agua ?? '—'}</td>
+                        <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{obs.agua_pci ? String(obs.agua_pci) : '—'}</td>
+                        <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.arranques_jockey ?? '—'}</td>
+                        <td className="px-3 py-2 font-mono text-gray-700 dark:text-slate-200">{r.arranques_compresor ?? '—'}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex gap-1 flex-wrap">
+                            {urlF
+                              ? <a href={urlF} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 text-[10px] font-medium bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded whitespace-nowrap">Form.</a>
+                              : <button onClick={() => downloadBlob(generateFormularioPDF(rondaToForm(r)), `ronda-${r.tipo}-${r.fecha}-formulario.pdf`)} className="text-blue-500 hover:text-blue-700 text-[10px] font-medium bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded whitespace-nowrap"><FileDown size={9} className="inline mr-0.5" />Form.</button>
+                            }
+                            {urlL
+                              ? <a href={urlL} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-800 text-[10px] font-medium bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 rounded whitespace-nowrap">Lect.</a>
+                              : <button onClick={() => downloadBlob(generateLecturasPDF(rondaToForm(r)), `ronda-${r.tipo}-${r.fecha}-lecturas.pdf`)} className="text-cyan-600 hover:text-cyan-800 text-[10px] font-medium bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 rounded whitespace-nowrap"><FileDown size={9} className="inline mr-0.5" />Lect.</button>
+                            }
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => openEdit(r)} title="Editar lecturas" className="text-gray-400 hover:text-blue-500 p-1 rounded transition-colors">
+                              <Pencil size={11} />
+                            </button>
+                            <button onClick={() => handleDelete(r.id)} title="Eliminar ronda" className="text-gray-400 hover:text-red-500 p-1 rounded transition-colors">
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
       </div>
+
+      {/* Edit dialog */}
+      {editingRonda && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-800 dark:text-white">Editar lecturas</h3>
+              <button onClick={() => setEditingRonda(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              Ronda de {TIPO_CFG[editingRonda.tipo].label} · {editingRonda.fecha} · {editingRonda.hora?.substring(0, 5)}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { key: 'electricidad', label: 'Electricidad', unit: 'kWh' },
+                { key: 'agua_comercial', label: 'Agua Comercial', unit: 'm³' },
+                { key: 'agua_pci', label: 'Agua PCI', unit: 'm³' },
+                { key: 'pci_jockey', label: 'PCI Jockey', unit: 'arr.' },
+                { key: 'compresor', label: 'Compresor', unit: 'arr.' },
+              ].map(({ key, label, unit }) => (
+                <div key={key}>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1">
+                    {label} <span className="text-gray-400 font-normal">({unit})</span>
+                  </label>
+                  <input
+                    type="number" step="any" min="0"
+                    className="w-full text-sm font-mono text-center border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
+                    value={editForm[key] ?? ''}
+                    onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+                    placeholder="—"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setEditingRonda(null)}
+                className="flex-1 py-2.5 text-sm text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-600 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={saving}
+                className="flex-1 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                <Check size={14} /> {saving ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
