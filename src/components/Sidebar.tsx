@@ -44,7 +44,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin)
 
   return (
-    <aside className="flex flex-col bg-slate-900 text-white shrink-0" style={{ width: 'var(--sidebar-width)', minHeight: '100vh' }}>
+    <aside className="flex flex-col bg-slate-900 text-white shrink-0 h-screen" style={{ width: 'var(--sidebar-width)' }}>
       {/* Logo */}
       <div className="px-4 py-4 border-b border-slate-700">
         <div className="flex items-center gap-2 mb-1">
