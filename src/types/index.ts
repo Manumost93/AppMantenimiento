@@ -175,6 +175,7 @@ export interface GeneralRepair {
   blocked_by_material: boolean
   external_company?: string
   observations?: string
+  photos?: string[]
   created_at: string
 }
 
@@ -329,6 +330,7 @@ export interface CbreJob {
   estimated_cost: number
   real_cost: number
   observations?: string
+  photos?: string[]
   created_at: string
   updated_at: string
 }

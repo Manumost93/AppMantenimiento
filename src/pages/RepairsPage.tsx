@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Wrench, CheckCircle2, Clock, AlertCircle, Edit2, Trash2, Eye } from 'lucide-react'
+import { Plus, Search, Wrench, CheckCircle2, Clock, AlertCircle, Edit2, Trash2, Eye, Camera } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
-import { getRepairs, upsertRepair, deleteRepair, getWorkers, getAreas } from '@/lib/supabase'
+import { getRepairs, upsertRepair, deleteRepair, getWorkers, getAreas, patchRepairPhotos } from '@/lib/supabase'
 import type { GeneralRepair, TeamMember, Area } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, PRIORITY_LABELS, PRIORITY_CLASSES, formatCurrency, formatDateShort, todayIso, getInitials } from '@/lib/utils'
+import PhotoUpload from '@/components/PhotoUpload'
 
 export default function RepairsPage() {
   const [repairs, setRepairs] = useState<GeneralRepair[]>([])
@@ -49,14 +50,14 @@ export default function RepairsPage() {
 
   function openCreate() {
     setSelected(null)
-    setForm({ status: 'pending', priority: 'medium', material_cost: 0, labor_cost: 0, total_cost: 0, blocked_by_material: false, request_date: todayIso() })
+    setForm({ status: 'pending', priority: 'medium', material_cost: 0, labor_cost: 0, total_cost: 0, blocked_by_material: false, request_date: todayIso(), photos: [] })
     setShowDialog(true)
   }
 
   function openEdit(r: GeneralRepair, e?: React.MouseEvent) {
     e?.stopPropagation()
     setSelected(r)
-    setForm({ ...r })
+    setForm({ ...r, photos: r.photos ?? [] })
     setShowDetail(false)
     setShowDialog(true)
   }
@@ -76,10 +77,14 @@ export default function RepairsPage() {
         request_date: form.request_date || todayIso(),
       }
       const saved = await upsertRepair(payload)
+      // Save photos separately (requires photos column — see SQL in supabase.ts)
+      const photos = form.photos ?? []
+      patchRepairPhotos(saved.id, photos).catch(() => {})
       const withRelations = {
         ...saved,
         responsible: workers.find(w => w.id === saved.responsible_id),
         area: areas.find(a => a.id === saved.area_id)?.name || saved.area,
+        photos,
       }
       setRepairs(prev => selected ? prev.map(r => r.id === selected.id ? withRelations : r) : [withRelations, ...prev])
       setShowDialog(false)
@@ -358,6 +363,20 @@ export default function RepairsPage() {
               </div>
             )}
 
+            {/* Fotos adjuntas */}
+            {(selected.photos?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-1.5 flex items-center gap-1">
+                  <Camera size={11} /> Fotos adjuntas ({selected.photos!.length})
+                </p>
+                <PhotoUpload
+                  photos={selected.photos!}
+                  onChange={() => {}}
+                  readOnly
+                />
+              </div>
+            )}
+
             <div className="flex gap-2 pt-1 border-t border-gray-100 dark:border-slate-700">
               <Button variant="outline" className="flex-1" onClick={() => openEdit(selected)}>
                 <Edit2 size={13} /> Editar
@@ -454,6 +473,16 @@ export default function RepairsPage() {
             <input type="checkbox" id="blocked" checked={form.blocked_by_material || false}
               onChange={e => setForm(f => ({ ...f, blocked_by_material: e.target.checked }))} className="rounded" />
             <label htmlFor="blocked" className="text-sm text-gray-700 dark:text-slate-300">Bloqueado por falta de material</label>
+          </div>
+          <div className="col-span-full">
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
+              <Camera size={11} /> Fotos ({form.photos?.length ?? 0}/8)
+            </label>
+            <PhotoUpload
+              photos={form.photos ?? []}
+              onChange={urls => setForm(f => ({ ...f, photos: urls }))}
+              prefix={`repair-${selected?.id ?? 'new'}-`}
+            />
           </div>
           <div className="col-span-full flex gap-2 pt-2 border-t border-gray-100 dark:border-slate-700">
             <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)} disabled={saving}>Cancelar</Button>

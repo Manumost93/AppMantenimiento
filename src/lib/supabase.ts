@@ -305,6 +305,7 @@ export async function upsertRepair(repair: Partial<GeneralRepair>): Promise<Gene
   delete payload.responsible
   delete payload.area_info
   delete payload.total_cost
+  delete payload.photos  // handled separately via patchRepairPhotos
   if (!payload.id) delete payload.id
   const { data, error } = await supabase
     .from('general_repairs')
@@ -559,6 +560,31 @@ export async function deleteRonda(id: number): Promise<void> {
   if (error) throw error
 }
 
+// ─── Fotos de reparaciones (bucket: repair-photos, público) ──────────────────
+// SQL requerido (ejecutar una vez en Supabase SQL Editor):
+//   ALTER TABLE general_repairs ADD COLUMN IF NOT EXISTS photos TEXT[] DEFAULT '{}'::TEXT[];
+//   ALTER TABLE cbre_jobs       ADD COLUMN IF NOT EXISTS photos TEXT[] DEFAULT '{}'::TEXT[];
+// Storage: Dashboard → Storage → New bucket "repair-photos" (Public: ON)
+
+export async function uploadRepairPhoto(blob: Blob, path: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage
+      .from('repair-photos')
+      .upload(path, blob, { contentType: 'image/jpeg', upsert: false })
+    if (error || !data) return null
+    const { data: { publicUrl } } = supabase.storage.from('repair-photos').getPublicUrl(data.path)
+    return publicUrl
+  } catch { return null }
+}
+
+export async function patchRepairPhotos(id: number, photos: string[]): Promise<void> {
+  await supabase.from('general_repairs').update({ photos }).eq('id', id)
+}
+
+export async function patchCbreJobPhotos(id: number, photos: string[]): Promise<void> {
+  await supabase.from('cbre_jobs').update({ photos }).eq('id', id)
+}
+
 export async function uploadRondaPDF(pdfBlob: Blob, path: string): Promise<string | null> {
   try {
     const { data, error } = await supabase.storage
@@ -806,7 +832,8 @@ export async function getCbreJobs(): Promise<CbreJob[]> {
 }
 
 export async function upsertCbreJob(job: Partial<CbreJob>): Promise<CbreJob> {
-  const { id, responsible, ...payload } = job as CbreJob & { responsible?: unknown }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id, responsible, photos, ...payload } = job as CbreJob & { responsible?: unknown }
   const { data, error } = await supabase
     .from('cbre_jobs')
     .upsert({ ...payload, ...(id ? { id } : {}), updated_at: new Date().toISOString() })

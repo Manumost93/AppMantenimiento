@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Edit2, Trash2, Clock, CheckCircle2, AlertCircle, HardHat, Wrench, CalendarClock, ChevronDown } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Clock, CheckCircle2, AlertCircle, HardHat, Wrench, CalendarClock, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Card, CardContent } from '@/components/ui/card'
-import { getCbreJobs, upsertCbreJob, deleteCbreJob, getWorkers } from '@/lib/supabase'
+import { getCbreJobs, upsertCbreJob, deleteCbreJob, getWorkers, patchCbreJobPhotos } from '@/lib/supabase'
 import type { CbreJob, CbreJobType, TeamMember } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, PRIORITY_LABELS, PRIORITY_CLASSES, formatCurrency, formatDateShort, todayIso, getInitials } from '@/lib/utils'
+import PhotoUpload from '@/components/PhotoUpload'
 
 // ─── Countdown helpers ────────────────────────────────────────────────────────
 
@@ -95,13 +96,13 @@ export default function CBREPage() {
 
   function openCreate() {
     setSelected(null)
-    setForm({ job_type: 'task', priority: 'medium', status: 'pending', estimated_cost: 0, real_cost: 0, start_date: todayIso() })
+    setForm({ job_type: 'task', priority: 'medium', status: 'pending', estimated_cost: 0, real_cost: 0, start_date: todayIso(), photos: [] })
     setShowDialog(true)
   }
 
   function openEdit(j: CbreJob, e?: React.MouseEvent) {
     e?.stopPropagation()
-    setSelected(j); setForm({ ...j }); setShowDetail(false); setShowDialog(true)
+    setSelected(j); setForm({ ...j, photos: j.photos ?? [] }); setShowDetail(false); setShowDialog(true)
   }
 
   function openDetail(j: CbreJob) {
@@ -113,7 +114,10 @@ export default function CBREPage() {
     setSaving(true)
     try {
       const saved = await upsertCbreJob({ ...form, id: selected?.id })
-      const withWorker = { ...saved, responsible: workers.find(w => w.id === saved.responsible_id) }
+      // Save photos separately (requires photos column — see SQL in supabase.ts)
+      const photos = form.photos ?? []
+      patchCbreJobPhotos(saved.id, photos).catch(() => {})
+      const withWorker = { ...saved, responsible: workers.find(w => w.id === saved.responsible_id), photos }
       setJobs(prev => selected ? prev.map(j => j.id === selected.id ? withWorker : j) : [withWorker, ...prev])
       setShowDialog(false)
     } catch { alert('Error al guardar.') }
@@ -331,6 +335,20 @@ export default function CBREPage() {
 
             {selected.observations && <p className="text-sm text-gray-600 dark:text-slate-300 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">{selected.observations}</p>}
 
+            {/* Fotos adjuntas */}
+            {(selected.photos?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-1.5 flex items-center gap-1">
+                  <Camera size={11} /> Fotos adjuntas ({selected.photos!.length})
+                </p>
+                <PhotoUpload
+                  photos={selected.photos!}
+                  onChange={() => {}}
+                  readOnly
+                />
+              </div>
+            )}
+
             <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-slate-700">
               <Button variant="outline" className="flex-1" onClick={() => openEdit(selected)}><Edit2 size={13} /> Editar</Button>
               <button onClick={() => handleDelete(selected.id)}
@@ -415,6 +433,16 @@ export default function CBREPage() {
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Observaciones</label>
             <input className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-white"
               value={form.observations || ''} onChange={e => setForm(f => ({ ...f, observations: e.target.value }))} />
+          </div>
+          <div className="col-span-full">
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
+              <Camera size={11} /> Fotos ({form.photos?.length ?? 0}/8)
+            </label>
+            <PhotoUpload
+              photos={form.photos ?? []}
+              onChange={urls => setForm(f => ({ ...f, photos: urls }))}
+              prefix={`cbre-${selected?.id ?? 'new'}-`}
+            />
           </div>
           <div className="col-span-full flex gap-2 pt-2 border-t border-gray-100 dark:border-slate-700">
             <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)} disabled={saving}>Cancelar</Button>
