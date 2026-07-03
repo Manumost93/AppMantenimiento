@@ -14,15 +14,17 @@ import { getSocCases } from '@/lib/supabase'
 import UrlAnalyzer from '@/components/UrlAnalyzer'
 import EmailAnalyzer from '@/components/EmailAnalyzer'
 import FileTriageAnalyzer from '@/components/FileTriageAnalyzer'
+import SecurityEventForm from '@/components/SecurityEventForm'
 import { SEVERITY_META, STATUS_META, type SocCaseType } from '@/lib/soc'
 import { PageLoading } from '@/components/Skeleton'
 
-type AnalysisView = 'picker' | 'url' | 'email' | 'file'
+type AnalysisView = 'picker' | SocCaseType
 
-const ANALYZER_TITLES: Record<Exclude<AnalysisView, 'picker'>, string> = {
+const ANALYZER_TITLES: Record<SocCaseType, string> = {
   url: 'Analizar URL',
   email: 'Analizar correo',
   file: 'Revisar archivo',
+  event: 'Registrar evento de seguridad',
 }
 
 const TYPE_META: Record<SocCaseType, { label: string; icon: typeof Link2 }> = {
@@ -66,13 +68,7 @@ export default function SocLitePage() {
   ]
 
   function handlePickAnalysis(type: SocCaseType) {
-    if (type === 'url' || type === 'email' || type === 'file') {
-      setAnalysisView(type)
-      return
-    }
-    setShowNewDialog(false)
-    const label = NEW_ANALYSIS_OPTIONS.find(o => o.type === type)?.label ?? 'Análisis'
-    toast.info(`${label}: disponible en una próxima fase de SOC Lite.`)
+    setAnalysisView(type)
   }
 
   function closeNewDialog() {
@@ -236,6 +232,7 @@ export default function SocLitePage() {
             {analysisView === 'url' && <UrlAnalyzer onCaseSaved={handleCaseSaved} />}
             {analysisView === 'email' && <EmailAnalyzer onCaseSaved={handleCaseSaved} />}
             {analysisView === 'file' && <FileTriageAnalyzer onCaseSaved={handleCaseSaved} />}
+            {analysisView === 'event' && <SecurityEventForm onCaseSaved={handleCaseSaved} />}
           </div>
         )}
       </Dialog>

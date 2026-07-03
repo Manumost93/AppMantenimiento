@@ -128,6 +128,30 @@ export const SEVERITY_BANNER: Record<SocSeverity, { bg: string; text: string }> 
   critical: { bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-700 dark:text-red-400' },
 }
 
+// Punto medio de cada banda de severidad — usado como risk_score para eventos
+// de seguridad, donde la severidad la fija la persona que registra el evento
+// (no hay un análisis automático como en URL/correo/archivo).
+export const SEVERITY_MIDPOINT: Record<SocSeverity, number> = {
+  low: 15, medium: 45, high: 70, critical: 90,
+}
+
+export const SECURITY_EVENT_TYPES = [
+  'Acceso fuera de horario a sala técnica',
+  'Cámara CCTV offline',
+  'Fallo en control de accesos',
+  'Rack abierto',
+  'Dispositivo sin comunicación',
+  'Intento de acceso no autorizado',
+  'Proveedor accede fuera de ventana autorizada',
+  'Múltiples fallos de PIN',
+  'Firewall alert simulada',
+  'Switch offline',
+  'Sensor manipulado',
+  'SAI en batería',
+  'Temperatura crítica en sala técnica',
+  'Otro',
+]
+
 const IMPERSONATED_BRANDS = [
   'microsoft', 'google', 'amazon', 'ikea', 'paypal', 'banco', 'santander', 'caixabank', 'correos',
 ]
