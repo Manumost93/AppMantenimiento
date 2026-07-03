@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Server, Boxes, Network, ShieldCheck, Router as RouterIcon, BatteryCharging, Plug, Wind,
   Thermometer, Droplets, Camera, KeyRound, Zap, Fuel, Cpu, Siren, Cable,
-  Plus, Search, Edit2, Trash2, Layers, AlertTriangle, WifiOff, Wrench, CalendarClock,
+  Plus, Search, Edit2, Trash2, Layers, AlertTriangle, WifiOff, Wrench, CalendarClock, Sparkles,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -59,6 +59,29 @@ function isUpcomingCheck(dateStr?: string): boolean {
   in7Days.setDate(in7Days.getDate() + 7)
   return new Date(dateStr) <= in7Days
 }
+
+function daysFromToday(offset: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + offset)
+  return d.toISOString().split('T')[0]
+}
+
+// Datos de ejemplo realistas — se crean vía upsertEdgeAsset(), como un alta manual normal
+// (misma validación, RLS y audit log), no son un INSERT SQL directo.
+const SEED_ASSETS: Partial<EdgeAsset>[] = [
+  { name: 'Rack Sala Técnica 1', asset_type: 'rack', location: 'Sala técnica planta -1', rack: 'R1', criticality: 'critical', status: 'operational', last_check_date: daysFromToday(-30), next_check_date: daysFromToday(60), repair_cost: 0 },
+  { name: 'Servidor Edge Principal', asset_type: 'edge_server', location: 'Sala técnica planta -1', rack: 'R1', rack_unit: 'U10-U12', criticality: 'critical', status: 'operational', ip_address: '10.0.1.10', last_check_date: daysFromToday(-15), next_check_date: daysFromToday(45), repair_cost: 0 },
+  { name: 'Switch Core Planta -1', asset_type: 'switch', location: 'Sala técnica planta -1', rack: 'R1', rack_unit: 'U5', criticality: 'high', status: 'operational', ip_address: '10.0.1.1', last_check_date: daysFromToday(-15), next_check_date: daysFromToday(45), repair_cost: 0 },
+  { name: 'Firewall Perimetral', asset_type: 'firewall', location: 'Sala técnica planta -1', rack: 'R2', criticality: 'critical', status: 'operational', ip_address: '10.0.0.1', last_check_date: daysFromToday(-10), next_check_date: daysFromToday(50), repair_cost: 0 },
+  { name: 'SAI Sala Técnica', asset_type: 'ups', location: 'Sala técnica planta -1', rack: 'R2', criticality: 'critical', status: 'warning', last_check_date: daysFromToday(-45), next_check_date: daysFromToday(3), notes: 'Batería con más de 3 años, valorar sustitución preventiva.', repair_cost: 0 },
+  { name: 'PDU Rack R1', asset_type: 'pdu', location: 'Sala técnica planta -1', rack: 'R1', criticality: 'medium', status: 'operational', last_check_date: daysFromToday(-30), next_check_date: daysFromToday(60), repair_cost: 0 },
+  { name: 'Climatización Sala Servidores', asset_type: 'hvac', location: 'Sala técnica planta -1', criticality: 'high', status: 'maintenance', last_check_date: daysFromToday(-2), next_check_date: daysFromToday(5), notes: 'Revisión de filtros y gas refrigerante en curso.', repair_cost: 180 },
+  { name: 'Sensor Temperatura Sala Técnica', asset_type: 'temperature_sensor', location: 'Sala técnica planta -1', criticality: 'medium', status: 'operational', last_check_date: daysFromToday(-10), next_check_date: daysFromToday(80), repair_cost: 0 },
+  { name: 'CCTV Zona de Carga', asset_type: 'cctv', location: 'Zona de carga', criticality: 'medium', status: 'offline', last_check_date: daysFromToday(-20), next_check_date: daysFromToday(1), notes: 'Sin señal desde ayer, pendiente de revisión.', repair_cost: 0 },
+  { name: 'Control de Accesos Sala Técnica', asset_type: 'access_control', location: 'Sala técnica planta -1', criticality: 'high', status: 'operational', last_check_date: daysFromToday(-30), next_check_date: daysFromToday(90), repair_cost: 0 },
+  { name: 'Cuadro Eléctrico General', asset_type: 'electrical_panel', location: 'Cuarto eléctrico', criticality: 'critical', status: 'operational', last_check_date: daysFromToday(-60), next_check_date: daysFromToday(30), repair_cost: 0 },
+  { name: 'Generador Diésel', asset_type: 'generator', location: 'Exterior / Parking', criticality: 'critical', status: 'operational', last_check_date: daysFromToday(-90), next_check_date: daysFromToday(15), repair_cost: 0 },
+]
 
 export default function EdgeAssetsPage() {
   const toast = useToast()
@@ -138,6 +161,29 @@ export default function EdgeAssetsPage() {
     }
   }
 
+  async function handleSeedExamples() {
+    const ok = await confirm({
+      title: 'Cargar activos de ejemplo',
+      message: `Se crearán ${SEED_ASSETS.length} activos de ejemplo (rack, servidor, switch, firewall, SAI, PDU, HVAC, sensores, CCTV, control de accesos, cuadro eléctrico y generador). Podrás editarlos o eliminarlos después.`,
+      confirmLabel: 'Cargar ejemplos',
+      danger: false,
+    })
+    if (!ok) return
+    setSaving(true)
+    try {
+      const created: EdgeAsset[] = []
+      for (const seed of SEED_ASSETS) {
+        created.push(await upsertEdgeAsset(seed))
+      }
+      setAssets(prev => [...prev, ...created])
+      toast.success(`${created.length} activos de ejemplo creados`)
+    } catch {
+      toast.error('Error al cargar los ejemplos. Puede que se hayan creado algunos.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) return <PageLoading kpis={5} rows={5} />
 
   return (
@@ -208,7 +254,15 @@ export default function EdgeAssetsPage() {
       {filtered.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <p>{assets.length === 0 ? 'No hay activos registrados todavía.' : 'Sin resultados para estos filtros.'}</p>
-          {assets.length === 0 && <Button size="sm" className="mt-3" onClick={openCreate}>Añadir el primero</Button>}
+          {assets.length === 0 && (
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <Button size="sm" onClick={openCreate}>Añadir el primero</Button>
+              <Button size="sm" variant="outline" onClick={handleSeedExamples} disabled={saving}>
+                <Sparkles size={14} />
+                {saving ? 'Cargando...' : 'Cargar ejemplos'}
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
