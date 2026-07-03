@@ -3,7 +3,7 @@ import {
   Calendar, LayoutDashboard, User, Users, Truck, FolderOpen,
   Building2, Paintbrush2, UtensilsCrossed, Wrench,
   BarChart2, Settings, ChevronRight, Shield, ClipboardCheck, ShieldAlert, BookOpen, Trash2,
-  HardHat, Thermometer, Radar, History, Server
+  HardHat, Thermometer, Radar, History, Server, Activity
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -21,6 +21,7 @@ const navItems = [
   { path: '/cbre',      icon: HardHat,            label: 'CBRE',               section: 'areas',  adminOnly: false },
   { path: '/bms',       icon: Thermometer,        label: 'BMS / IndoorClima',  section: 'areas',  adminOnly: false },
   { path: '/edge-assets', icon: Server,           label: 'Activos Críticos',   section: 'critical', adminOnly: false },
+  { path: '/edge-ops',  icon: Activity,           label: 'Dashboard EdgeOps',  section: 'critical', adminOnly: false },
   { path: '/meetings',  icon: BookOpen,           label: 'Reuniones',          section: 'work',   adminOnly: false },
   { path: '/waste',     icon: Trash2,             label: 'Residuos',           section: 'work',   adminOnly: false },
   { path: '/team',      icon: Users,              label: 'Equipo',             section: 'manage', adminOnly: false },

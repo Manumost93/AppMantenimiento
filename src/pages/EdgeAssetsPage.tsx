@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  Server, Boxes, Network, ShieldCheck, Router as RouterIcon, BatteryCharging, Plug, Wind,
-  Thermometer, Droplets, Camera, KeyRound, Zap, Fuel, Cpu, Siren, Cable,
+  Server,
   Plus, Search, Edit2, Trash2, Layers, AlertTriangle, WifiOff, Wrench, CalendarClock, Sparkles,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,50 +14,10 @@ import { getEdgeAssets, upsertEdgeAsset, deleteEdgeAsset, getProviders } from '@
 import type { EdgeAsset, EdgeAssetType, EdgeAssetCriticality, EdgeAssetStatus, Provider } from '@/types'
 import { cn, formatCurrency, todayIso } from '@/lib/utils'
 import { PageLoading } from '@/components/Skeleton'
-
-const ASSET_TYPE_META: Record<EdgeAssetType, { label: string; icon: typeof Server }> = {
-  rack: { label: 'Rack', icon: Boxes },
-  edge_server: { label: 'Servidor Edge', icon: Server },
-  switch: { label: 'Switch', icon: Network },
-  firewall: { label: 'Firewall', icon: ShieldCheck },
-  router: { label: 'Router', icon: RouterIcon },
-  ups: { label: 'SAI / UPS', icon: BatteryCharging },
-  pdu: { label: 'PDU', icon: Plug },
-  hvac: { label: 'HVAC / Climatización', icon: Wind },
-  temperature_sensor: { label: 'Sensor de temperatura', icon: Thermometer },
-  humidity_sensor: { label: 'Sensor de humedad', icon: Droplets },
-  cctv: { label: 'CCTV', icon: Camera },
-  access_control: { label: 'Control de accesos', icon: KeyRound },
-  electrical_panel: { label: 'Cuadro eléctrico', icon: Zap },
-  generator: { label: 'Generador', icon: Fuel },
-  bms_controller: { label: 'Controlador BMS', icon: Cpu },
-  pci_panel: { label: 'Panel PCI', icon: Siren },
-  network_cabinet: { label: 'Armario de red', icon: Cable },
-}
-
-const CRITICALITY_META: Record<EdgeAssetCriticality, { label: string; className: string }> = {
-  low: { label: 'Baja', className: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300' },
-  medium: { label: 'Media', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  high: { label: 'Alta', className: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
-  critical: { label: 'Crítica', className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-}
-
-const STATUS_META: Record<EdgeAssetStatus, { label: string; className: string }> = {
-  operational: { label: 'Operativo', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
-  warning: { label: 'Aviso', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  offline: { label: 'Offline', className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-  maintenance: { label: 'Mantenimiento', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-}
+import { ASSET_TYPE_META, CRITICALITY_META, STATUS_META, isUpcomingCheck } from '@/lib/edgeAssets'
 
 const inputClass = 'w-full text-sm border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-800 dark:text-slate-200'
 const labelClass = 'block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1'
-
-function isUpcomingCheck(dateStr?: string): boolean {
-  if (!dateStr) return false
-  const in7Days = new Date()
-  in7Days.setDate(in7Days.getDate() + 7)
-  return new Date(dateStr) <= in7Days
-}
 
 function daysFromToday(offset: number): string {
   const d = new Date()

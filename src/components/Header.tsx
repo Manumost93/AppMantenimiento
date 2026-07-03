@@ -28,6 +28,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/soc-lite':  'SOC Lite · Análisis defensivo',
   '/audit-log': 'Audit Log · Trazabilidad',
   '/edge-assets': 'Edge / Data Center Lite · Activos críticos',
+  '/edge-ops': 'Dashboard EdgeOps',
 }
 
 const PAGE_ICONS: Record<string, string> = {
@@ -50,6 +51,7 @@ const PAGE_ICONS: Record<string, string> = {
   '/soc-lite':  '🛰️',
   '/audit-log': '🕵️',
   '/edge-assets': '🖥️',
+  '/edge-ops': '📡',
 }
 
 function getTodayString() {
