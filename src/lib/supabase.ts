@@ -4,6 +4,7 @@ import type {
   CominIonJob, FoodIncident, GeneralRepair,
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
+  AuditLog,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -14,6 +15,41 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// ─── Audit Log (Fase 6) ────────────────────────────────────────────────────
+// SQL: database/audit_log_schema.sql
+//
+// "Fire and forget": nunca lanza error ni bloquea la acción que la llama.
+// Si el registro de auditoría falla, la operación real (login, guardar un
+// caso SOC, etc.) debe completarse igual — auditar nunca puede romper nada.
+
+export async function createAuditLog(entry: {
+  user_id?: number
+  user_name?: string
+  action: string
+  module: string
+  entity_type?: string
+  entity_id?: number
+  description?: string
+  severity?: AuditLog['severity']
+  metadata?: Record<string, unknown>
+}): Promise<void> {
+  try {
+    await supabase.from('audit_logs').insert({ severity: 'info', ...entry })
+  } catch {
+    // silencioso a propósito
+  }
+}
+
+export async function getAuditLogs(limit = 300): Promise<AuditLog[]> {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data ?? []
+}
 
 // ─── Workers (Equipo) ────────────────────────────────────────────────────────
 
@@ -948,11 +984,22 @@ export async function createSocCase(payload: Partial<SocCaseRecord>): Promise<So
     .select(SOC_CASE_SELECT)
     .single()
   if (error) throw error
-  return {
+  const result = {
     ...data,
     reported_by: data.reported_by ?? undefined,
     assigned_to: data.assigned_to ?? undefined,
   } as SocCaseRecord
+  createAuditLog({
+    user_id: result.reported_by_id,
+    user_name: result.reported_by?.name,
+    action: 'soc_case_created',
+    module: 'soc_lite',
+    entity_type: 'soc_case',
+    entity_id: result.id,
+    description: `Caso SOC creado (${result.case_type}): ${result.title}`,
+    severity: result.severity === 'critical' || result.severity === 'high' ? 'warning' : 'info',
+  })
+  return result
 }
 
 export async function updateSocCaseStatus(id: number, status: SocCaseRecord['status']): Promise<SocCaseRecord> {
@@ -965,11 +1012,21 @@ export async function updateSocCaseStatus(id: number, status: SocCaseRecord['sta
     .select(SOC_CASE_SELECT)
     .single()
   if (error) throw error
-  return {
+  const result = {
     ...data,
     reported_by: data.reported_by ?? undefined,
     assigned_to: data.assigned_to ?? undefined,
   } as SocCaseRecord
+  if (status === 'closed') {
+    createAuditLog({
+      action: 'soc_case_closed',
+      module: 'soc_lite',
+      entity_type: 'soc_case',
+      entity_id: result.id,
+      description: `Caso SOC cerrado: ${result.title}`,
+    })
+  }
+  return result
 }
 
 export async function createUrlAnalysis(payload: Omit<SocUrlAnalysisRecord, 'id' | 'created_at'>): Promise<SocUrlAnalysisRecord> {

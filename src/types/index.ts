@@ -412,3 +412,21 @@ export interface RondaEntry {
   observaciones?: string
   created_at: string
 }
+
+// ─── Audit Log / trazabilidad ────────────────────────────────────────────────
+
+export type AuditSeverity = 'info' | 'warning' | 'critical'
+
+export interface AuditLog {
+  id: number
+  user_id?: number
+  user_name?: string
+  action: string
+  module: string
+  entity_type?: string
+  entity_id?: number
+  description?: string
+  severity: AuditSeverity
+  metadata?: Record<string, unknown>
+  created_at: string
+}
