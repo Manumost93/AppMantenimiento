@@ -2,14 +2,7 @@ import { useState } from 'react'
 import { ShieldCheck, AlertTriangle, Lock, LockOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { analyzeUrl, type UrlAnalysisResult, type SocSeverity } from '@/lib/soc'
-
-const SEVERITY_BANNER: Record<SocSeverity, { bg: string; text: string }> = {
-  low: { bg: 'bg-gray-50 dark:bg-slate-700/50', text: 'text-gray-700 dark:text-slate-200' },
-  medium: { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-700 dark:text-amber-400' },
-  high: { bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-700 dark:text-orange-400' },
-  critical: { bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-700 dark:text-red-400' },
-}
+import { analyzeUrl, type UrlAnalysisResult, SEVERITY_BANNER, SEVERITY_LABEL_ES } from '@/lib/soc'
 
 export default function UrlAnalyzer() {
   const [url, setUrl] = useState('')
@@ -50,7 +43,7 @@ export default function UrlAnalyzer() {
                 ? <ShieldCheck size={18} className={SEVERITY_BANNER[result.severity].text} />
                 : <AlertTriangle size={18} className={SEVERITY_BANNER[result.severity].text} />}
               <span className={cn('font-semibold text-sm', SEVERITY_BANNER[result.severity].text)}>
-                Riesgo {result.severity === 'low' ? 'bajo' : result.severity === 'medium' ? 'medio' : result.severity === 'high' ? 'alto' : 'crítico'}
+                Riesgo {SEVERITY_LABEL_ES[result.severity]}
               </span>
             </div>
             <span className={cn('text-2xl font-bold', SEVERITY_BANNER[result.severity].text)}>

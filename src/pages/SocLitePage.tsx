@@ -10,7 +10,15 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
 import UrlAnalyzer from '@/components/UrlAnalyzer'
+import EmailAnalyzer from '@/components/EmailAnalyzer'
 import { SEVERITY_META, STATUS_META, type SocCaseType, type SocCase } from '@/lib/soc'
+
+type AnalysisView = 'picker' | 'url' | 'email'
+
+const ANALYZER_TITLES: Record<Exclude<AnalysisView, 'picker'>, string> = {
+  url: 'Analizar URL',
+  email: 'Analizar correo',
+}
 
 // Datos de ejemplo — Fase 1 (visual, sin Supabase todavía)
 const MOCK_CASES: SocCase[] = [
@@ -50,7 +58,7 @@ export default function SocLitePage() {
   const toast = useToast()
   const [activeTab, setActiveTab] = useState<'all' | SocCaseType>('all')
   const [showNewDialog, setShowNewDialog] = useState(false)
-  const [analysisView, setAnalysisView] = useState<'picker' | 'url'>('picker')
+  const [analysisView, setAnalysisView] = useState<AnalysisView>('picker')
 
   const filtered = activeTab === 'all' ? MOCK_CASES : MOCK_CASES.filter(c => c.type === activeTab)
 
@@ -64,8 +72,8 @@ export default function SocLitePage() {
   ]
 
   function handlePickAnalysis(type: SocCaseType) {
-    if (type === 'url') {
-      setAnalysisView('url')
+    if (type === 'url' || type === 'email') {
+      setAnalysisView(type)
       return
     }
     setShowNewDialog(false)
@@ -191,8 +199,8 @@ export default function SocLitePage() {
       <Dialog
         open={showNewDialog}
         onClose={closeNewDialog}
-        title={analysisView === 'url' ? 'Analizar URL' : 'Nuevo análisis'}
-        size={analysisView === 'url' ? 'lg' : 'md'}
+        title={analysisView === 'picker' ? 'Nuevo análisis' : ANALYZER_TITLES[analysisView]}
+        size={analysisView === 'picker' ? 'md' : 'lg'}
       >
         {analysisView === 'picker' ? (
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -224,7 +232,8 @@ export default function SocLitePage() {
               <ArrowLeft size={13} />
               Volver
             </button>
-            <UrlAnalyzer />
+            {analysisView === 'url' && <UrlAnalyzer />}
+            {analysisView === 'email' && <EmailAnalyzer />}
           </div>
         )}
       </Dialog>
