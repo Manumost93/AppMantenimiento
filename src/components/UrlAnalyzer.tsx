@@ -1,16 +1,54 @@
 import { useState } from 'react'
-import { ShieldCheck, AlertTriangle, Lock, LockOpen } from 'lucide-react'
+import { ShieldCheck, AlertTriangle, Lock, LockOpen, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { analyzeUrl, type UrlAnalysisResult, SEVERITY_BANNER, SEVERITY_LABEL_ES } from '@/lib/soc'
+import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
+import { createSocCase, createUrlAnalysis } from '@/lib/supabase'
 
-export default function UrlAnalyzer() {
+export default function UrlAnalyzer({ onCaseSaved }: { onCaseSaved?: () => void }) {
+  const { worker } = useAuth()
+  const toast = useToast()
   const [url, setUrl] = useState('')
   const [result, setResult] = useState<UrlAnalysisResult | null>(null)
+  const [saving, setSaving] = useState(false)
 
   function handleAnalyze() {
     if (!url.trim()) return
     setResult(analyzeUrl(url))
+  }
+
+  async function handleSaveCase() {
+    if (!result) return
+    setSaving(true)
+    try {
+      const socCase = await createSocCase({
+        title: `Análisis de URL: ${result.domain}`,
+        case_type: 'url',
+        status: 'open',
+        severity: result.severity,
+        description: result.recommendation,
+        reported_by_id: worker?.id,
+      })
+      await createUrlAnalysis({
+        case_id: socCase.id,
+        url,
+        domain: result.domain,
+        uses_https: result.usesHttps,
+        has_ip_address: /^(\d{1,3}\.){3}\d{1,3}$/.test(result.domain),
+        url_length: url.trim().length,
+        suspicious_keywords: result.reasons,
+        risk_score: result.score,
+        severity: result.severity,
+        recommendation: result.recommendation,
+      })
+      onCaseSaved?.()
+    } catch {
+      toast.error('No se pudo guardar el caso. Inténtalo de nuevo.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -80,6 +118,11 @@ export default function UrlAnalyzer() {
               <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-0.5">Recomendación</p>
               <p className="text-xs text-blue-600 dark:text-blue-300">{result.recommendation}</p>
             </div>
+
+            <Button onClick={handleSaveCase} disabled={saving} size="sm" variant="outline" className="w-full sm:w-auto">
+              <Save size={14} />
+              {saving ? 'Guardando...' : 'Guardar caso'}
+            </Button>
           </div>
         </div>
       )}

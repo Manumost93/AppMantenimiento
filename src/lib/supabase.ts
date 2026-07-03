@@ -5,6 +5,10 @@ import type {
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
 } from '@/types'
+import type {
+  SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
+  SocFileAnalysisRecord, SocSecurityEventRecord, SocStats,
+} from '@/lib/soc'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -901,4 +905,107 @@ export async function deleteBmsIncident(id: number): Promise<void> {
 
 export async function updateBmsEquipmentStatus(id: number, status: BmsEquipment['status']): Promise<void> {
   await supabase.from('bms_equipment').update({ status }).eq('id', id)
+}
+
+// ─── SOC Lite (Fase 5) ─────────────────────────────────────────────────────
+// SQL: database/soc_lite_schema.sql
+
+const SOC_CASE_SELECT = '*, reported_by:workers!reported_by_id(id,name,color), assigned_to:workers!assigned_to_id(id,name,color)'
+
+export async function getSocCases(): Promise<SocCaseRecord[]> {
+  const { data, error } = await supabase
+    .from('soc_cases')
+    .select(SOC_CASE_SELECT)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(c => ({
+    ...c,
+    reported_by: c.reported_by ?? undefined,
+    assigned_to: c.assigned_to ?? undefined,
+  })) as SocCaseRecord[]
+}
+
+export async function getSocCaseById(id: number): Promise<SocCaseRecord | null> {
+  const { data, error } = await supabase
+    .from('soc_cases')
+    .select(SOC_CASE_SELECT)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  return {
+    ...data,
+    reported_by: data.reported_by ?? undefined,
+    assigned_to: data.assigned_to ?? undefined,
+  } as SocCaseRecord
+}
+
+export async function createSocCase(payload: Partial<SocCaseRecord>): Promise<SocCaseRecord> {
+  const { id, reported_by, assigned_to, ...insertPayload } = payload as SocCaseRecord
+  const { data, error } = await supabase
+    .from('soc_cases')
+    .insert(insertPayload)
+    .select(SOC_CASE_SELECT)
+    .single()
+  if (error) throw error
+  return {
+    ...data,
+    reported_by: data.reported_by ?? undefined,
+    assigned_to: data.assigned_to ?? undefined,
+  } as SocCaseRecord
+}
+
+export async function updateSocCaseStatus(id: number, status: SocCaseRecord['status']): Promise<SocCaseRecord> {
+  const payload: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
+  if (status === 'closed') payload.closed_at = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('soc_cases')
+    .update(payload)
+    .eq('id', id)
+    .select(SOC_CASE_SELECT)
+    .single()
+  if (error) throw error
+  return {
+    ...data,
+    reported_by: data.reported_by ?? undefined,
+    assigned_to: data.assigned_to ?? undefined,
+  } as SocCaseRecord
+}
+
+export async function createUrlAnalysis(payload: Omit<SocUrlAnalysisRecord, 'id' | 'created_at'>): Promise<SocUrlAnalysisRecord> {
+  const { data, error } = await supabase.from('soc_url_analysis').insert(payload).select().single()
+  if (error) throw error
+  return data as SocUrlAnalysisRecord
+}
+
+export async function createEmailAnalysis(payload: Omit<SocEmailAnalysisRecord, 'id' | 'created_at'>): Promise<SocEmailAnalysisRecord> {
+  const { data, error } = await supabase.from('soc_email_analysis').insert(payload).select().single()
+  if (error) throw error
+  return data as SocEmailAnalysisRecord
+}
+
+export async function createFileAnalysis(payload: Omit<SocFileAnalysisRecord, 'id' | 'created_at'>): Promise<SocFileAnalysisRecord> {
+  const { data, error } = await supabase.from('soc_file_analysis').insert(payload).select().single()
+  if (error) throw error
+  return data as SocFileAnalysisRecord
+}
+
+export async function createSecurityEvent(payload: Omit<SocSecurityEventRecord, 'id' | 'created_at'>): Promise<SocSecurityEventRecord> {
+  const { data, error } = await supabase.from('soc_security_events').insert(payload).select().single()
+  if (error) throw error
+  return data as SocSecurityEventRecord
+}
+
+export async function getSocStats(): Promise<SocStats> {
+  const { data, error } = await supabase.from('soc_cases').select('status, severity, case_type')
+  if (error) throw error
+  const cases = data ?? []
+  return {
+    openCases: cases.filter(c => c.status === 'open').length,
+    criticalCases: cases.filter(c => c.severity === 'critical').length,
+    urlsAnalyzed: cases.filter(c => c.case_type === 'url').length,
+    emailsReviewed: cases.filter(c => c.case_type === 'email').length,
+    filesReviewed: cases.filter(c => c.case_type === 'file').length,
+    securityEvents: cases.filter(c => c.case_type === 'event').length,
+  }
 }

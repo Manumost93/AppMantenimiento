@@ -1,22 +1,61 @@
 import { useState } from 'react'
-import { ShieldCheck, AlertTriangle, Link2, Paperclip } from 'lucide-react'
+import { ShieldCheck, AlertTriangle, Link2, Paperclip, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { analyzeEmail, type EmailAnalysisResult, SEVERITY_BANNER, SEVERITY_LABEL_ES } from '@/lib/soc'
+import { analyzeEmail, parseAttachmentNames, type EmailAnalysisResult, SEVERITY_BANNER, SEVERITY_LABEL_ES } from '@/lib/soc'
+import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
+import { createSocCase, createEmailAnalysis } from '@/lib/supabase'
 
-export default function EmailAnalyzer() {
+export default function EmailAnalyzer({ onCaseSaved }: { onCaseSaved?: () => void }) {
+  const { worker } = useAuth()
+  const toast = useToast()
   const [sender, setSender] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [hasAttachments, setHasAttachments] = useState(false)
   const [attachmentNames, setAttachmentNames] = useState('')
   const [result, setResult] = useState<EmailAnalysisResult | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const canAnalyze = subject.trim() !== '' || body.trim() !== '' || sender.trim() !== ''
 
   function handleAnalyze() {
     if (!canAnalyze) return
     setResult(analyzeEmail({ sender, subject, body, hasAttachments, attachmentNames }))
+  }
+
+  async function handleSaveCase() {
+    if (!result) return
+    setSaving(true)
+    try {
+      const socCase = await createSocCase({
+        title: `Correo sospechoso: ${subject.trim() || sender.trim() || 'sin asunto'}`,
+        case_type: 'email',
+        status: 'open',
+        severity: result.severity,
+        description: result.recommendation,
+        reported_by_id: worker?.id,
+      })
+      await createEmailAnalysis({
+        case_id: socCase.id,
+        sender,
+        subject,
+        body_excerpt: body.slice(0, 500),
+        extracted_links: result.links,
+        suspicious_keywords: result.reasons,
+        has_attachments: hasAttachments,
+        attachment_names: parseAttachmentNames(attachmentNames),
+        risk_score: result.score,
+        severity: result.severity,
+        recommendation: result.recommendation,
+      })
+      onCaseSaved?.()
+    } catch {
+      toast.error('No se pudo guardar el caso. Inténtalo de nuevo.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const inputClass = 'w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -129,6 +168,11 @@ export default function EmailAnalyzer() {
               <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-0.5">Recomendación</p>
               <p className="text-xs text-blue-600 dark:text-blue-300">{result.recommendation}</p>
             </div>
+
+            <Button onClick={handleSaveCase} disabled={saving} size="sm" variant="outline" className="w-full sm:w-auto">
+              <Save size={14} />
+              {saving ? 'Guardando...' : 'Guardar caso'}
+            </Button>
           </div>
         </div>
       )}

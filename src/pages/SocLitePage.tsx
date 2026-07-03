@@ -9,10 +9,13 @@ import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { getSocCases } from '@/lib/supabase'
 import UrlAnalyzer from '@/components/UrlAnalyzer'
 import EmailAnalyzer from '@/components/EmailAnalyzer'
 import FileTriageAnalyzer from '@/components/FileTriageAnalyzer'
-import { SEVERITY_META, STATUS_META, type SocCaseType, type SocCase } from '@/lib/soc'
+import { SEVERITY_META, STATUS_META, type SocCaseType } from '@/lib/soc'
+import { PageLoading } from '@/components/Skeleton'
 
 type AnalysisView = 'picker' | 'url' | 'email' | 'file'
 
@@ -21,18 +24,6 @@ const ANALYZER_TITLES: Record<Exclude<AnalysisView, 'picker'>, string> = {
   email: 'Analizar correo',
   file: 'Revisar archivo',
 }
-
-// Datos de ejemplo — Fase 1 (visual, sin Supabase todavía)
-const MOCK_CASES: SocCase[] = [
-  { id: 1, title: 'Archivo adjunto "factura.exe" recibido por correo', type: 'file', severity: 'critical', status: 'open', date: '2026-07-03', recommendation: 'No abrir el archivo. Escalar a responsable.', responsible: 'Manuel Honrado' },
-  { id: 2, title: 'Correo suplantando a "IKEA IT Support"', type: 'email', severity: 'critical', status: 'reviewing', date: '2026-07-01', recommendation: 'Validar remitente por canal alternativo.', responsible: 'Manuel Honrado' },
-  { id: 3, title: 'Enlace de phishing recibido por WhatsApp interno', type: 'url', severity: 'high', status: 'open', date: '2026-07-02', recommendation: 'No abrir desde equipos corporativos.', responsible: 'Sin asignar' },
-  { id: 4, title: 'Correo con urgencia para "actualizar contraseña"', type: 'email', severity: 'high', status: 'open', date: '2026-06-29', recommendation: 'Reportar a responsable. No introducir credenciales.', responsible: 'Sin asignar' },
-  { id: 5, title: 'Enlace acortado (bit.ly) en correo de proveedor', type: 'url', severity: 'medium', status: 'reviewing', date: '2026-06-30', recommendation: 'Revisar con precaución antes de abrir.', responsible: 'Manuel Honrado' },
-  { id: 6, title: 'Acceso fuera de horario a sala técnica BMS', type: 'event', severity: 'medium', status: 'closed', date: '2026-06-28', recommendation: 'Verificado con proveedor autorizado. Sin riesgo.', responsible: 'Manuel Honrado' },
-  { id: 7, title: 'Documento "nomina_pendiente.docm" sospechoso', type: 'file', severity: 'medium', status: 'false_positive', date: '2026-06-25', recommendation: 'Confirmado como documento interno legítimo.', responsible: 'Manuel Honrado' },
-  { id: 8, title: 'Cámara CCTV zona de carga offline 3h', type: 'event', severity: 'low', status: 'closed', date: '2026-06-20', recommendation: 'Incidencia de conectividad resuelta.', responsible: 'Sergio' },
-]
 
 const TYPE_META: Record<SocCaseType, { label: string; icon: typeof Link2 }> = {
   url: { label: 'Enlace', icon: Link2 },
@@ -58,19 +49,20 @@ const NEW_ANALYSIS_OPTIONS: { type: SocCaseType; label: string; description: str
 
 export default function SocLitePage() {
   const toast = useToast()
+  const { data: cases, loading } = useRealtimeTable('soc_cases', getSocCases)
   const [activeTab, setActiveTab] = useState<'all' | SocCaseType>('all')
   const [showNewDialog, setShowNewDialog] = useState(false)
   const [analysisView, setAnalysisView] = useState<AnalysisView>('picker')
 
-  const filtered = activeTab === 'all' ? MOCK_CASES : MOCK_CASES.filter(c => c.type === activeTab)
+  const filtered = activeTab === 'all' ? cases : cases.filter(c => c.case_type === activeTab)
 
   const kpis = [
-    { label: 'Casos abiertos', value: MOCK_CASES.filter(c => c.status === 'open').length, icon: <Inbox size={18} />, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', border: 'border-blue-200 dark:border-blue-800' },
-    { label: 'Casos críticos', value: MOCK_CASES.filter(c => c.severity === 'critical').length, icon: <Flame size={18} />, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/30', border: 'border-red-200 dark:border-red-800' },
-    { label: 'Enlaces analizados', value: MOCK_CASES.filter(c => c.type === 'url').length, icon: <Link2 size={18} />, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/30', border: 'border-purple-200 dark:border-purple-800' },
-    { label: 'Correos revisados', value: MOCK_CASES.filter(c => c.type === 'email').length, icon: <Mail size={18} />, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/30', border: 'border-amber-200 dark:border-amber-800' },
-    { label: 'Archivos revisados', value: MOCK_CASES.filter(c => c.type === 'file').length, icon: <FolderSearch size={18} />, color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-900/30', border: 'border-teal-200 dark:border-teal-800' },
-    { label: 'Eventos de seguridad', value: MOCK_CASES.filter(c => c.type === 'event').length, icon: <AlertTriangle size={18} />, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/30', border: 'border-orange-200 dark:border-orange-800' },
+    { label: 'Casos abiertos', value: cases.filter(c => c.status === 'open').length, icon: <Inbox size={18} />, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', border: 'border-blue-200 dark:border-blue-800' },
+    { label: 'Casos críticos', value: cases.filter(c => c.severity === 'critical').length, icon: <Flame size={18} />, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/30', border: 'border-red-200 dark:border-red-800' },
+    { label: 'Enlaces analizados', value: cases.filter(c => c.case_type === 'url').length, icon: <Link2 size={18} />, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/30', border: 'border-purple-200 dark:border-purple-800' },
+    { label: 'Correos revisados', value: cases.filter(c => c.case_type === 'email').length, icon: <Mail size={18} />, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/30', border: 'border-amber-200 dark:border-amber-800' },
+    { label: 'Archivos revisados', value: cases.filter(c => c.case_type === 'file').length, icon: <FolderSearch size={18} />, color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-900/30', border: 'border-teal-200 dark:border-teal-800' },
+    { label: 'Eventos de seguridad', value: cases.filter(c => c.case_type === 'event').length, icon: <AlertTriangle size={18} />, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/30', border: 'border-orange-200 dark:border-orange-800' },
   ]
 
   function handlePickAnalysis(type: SocCaseType) {
@@ -87,6 +79,13 @@ export default function SocLitePage() {
     setShowNewDialog(false)
     setAnalysisView('picker')
   }
+
+  function handleCaseSaved() {
+    closeNewDialog()
+    toast.success('Caso guardado en SOC Lite.')
+  }
+
+  if (loading) return <PageLoading kpis={6} rows={5} />
 
   return (
     <div className="p-5 space-y-4">
@@ -125,7 +124,7 @@ export default function SocLitePage() {
       {/* Tabs */}
       <div className="flex items-center gap-1.5 flex-wrap">
         {TABS.map(tab => {
-          const count = tab.key === 'all' ? MOCK_CASES.length : MOCK_CASES.filter(c => c.type === tab.key).length
+          const count = tab.key === 'all' ? cases.length : cases.filter(c => c.case_type === tab.key).length
           return (
             <button
               key={tab.key}
@@ -155,19 +154,19 @@ export default function SocLitePage() {
                 <th className="px-4 py-2.5 font-semibold">Estado</th>
                 <th className="px-4 py-2.5 font-semibold">Fecha</th>
                 <th className="px-4 py-2.5 font-semibold">Responsable</th>
-                <th className="px-4 py-2.5 font-semibold">Recomendación</th>
+                <th className="px-4 py-2.5 font-semibold">Descripción</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(c => {
-                const TypeIcon = TYPE_META[c.type].icon
+                const TypeIcon = TYPE_META[c.case_type].icon
                 return (
                   <tr key={c.id} className="border-t border-gray-100 dark:border-slate-700">
                     <td className="px-4 py-3 text-gray-800 dark:text-white font-medium max-w-xs">{c.title}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1.5 text-gray-600 dark:text-slate-300">
                         <TypeIcon size={13} />
-                        {TYPE_META[c.type].label}
+                        {TYPE_META[c.case_type].label}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -177,10 +176,10 @@ export default function SocLitePage() {
                       <Badge className={STATUS_META[c.status].className}>{STATUS_META[c.status].label}</Badge>
                     </td>
                     <td className="px-4 py-3 text-gray-500 dark:text-slate-400 whitespace-nowrap">
-                      {new Date(c.date + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      {new Date(c.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-slate-300 whitespace-nowrap">{c.responsible}</td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-slate-400 max-w-xs">{c.recommendation}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-slate-300 whitespace-nowrap">{c.assigned_to?.name ?? 'Sin asignar'}</td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-slate-400 max-w-xs">{c.description}</td>
                   </tr>
                 )
               })}
@@ -188,7 +187,7 @@ export default function SocLitePage() {
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-gray-400 dark:text-slate-500">
                     <CheckCircle2 size={22} className="mx-auto mb-2 opacity-40" />
-                    Sin casos en esta categoría
+                    {cases.length === 0 ? 'Todavía no hay casos registrados' : 'Sin casos en esta categoría'}
                   </td>
                 </tr>
               )}
@@ -234,9 +233,9 @@ export default function SocLitePage() {
               <ArrowLeft size={13} />
               Volver
             </button>
-            {analysisView === 'url' && <UrlAnalyzer />}
-            {analysisView === 'email' && <EmailAnalyzer />}
-            {analysisView === 'file' && <FileTriageAnalyzer />}
+            {analysisView === 'url' && <UrlAnalyzer onCaseSaved={handleCaseSaved} />}
+            {analysisView === 'email' && <EmailAnalyzer onCaseSaved={handleCaseSaved} />}
+            {analysisView === 'file' && <FileTriageAnalyzer onCaseSaved={handleCaseSaved} />}
           </div>
         )}
       </Dialog>

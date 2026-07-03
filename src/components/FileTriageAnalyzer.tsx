@@ -1,22 +1,28 @@
 import { useRef, useState } from 'react'
-import { ShieldCheck, AlertTriangle, FileWarning, Hash, Upload } from 'lucide-react'
+import { ShieldCheck, AlertTriangle, FileWarning, Hash, Upload, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   analyzeFile, computeSha256, formatFileSize,
   type FileAnalysisResult, SEVERITY_BANNER, SEVERITY_LABEL_ES,
 } from '@/lib/soc'
+import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
+import { createSocCase, createFileAnalysis } from '@/lib/supabase'
 
 // Solo lee metadatos y calcula el hash localmente (Web Crypto API).
 // El archivo nunca se ejecuta, ni se abre, ni se sube a ningún sitio.
 const MAX_HASH_SIZE = 100 * 1024 * 1024 // 100 MB
 
-export default function FileTriageAnalyzer() {
+export default function FileTriageAnalyzer({ onCaseSaved }: { onCaseSaved?: () => void }) {
+  const { worker } = useAuth()
+  const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [hash, setHash] = useState<string | null>(null)
   const [hashing, setHashing] = useState(false)
   const [result, setResult] = useState<FileAnalysisResult | null>(null)
+  const [saving, setSaving] = useState(false)
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null
@@ -35,6 +41,37 @@ export default function FileTriageAnalyzer() {
   function handleAnalyze() {
     if (!file) return
     setResult(analyzeFile({ fileName: file.name, fileSize: file.size, mimeType: file.type }))
+  }
+
+  async function handleSaveCase() {
+    if (!result || !file) return
+    setSaving(true)
+    try {
+      const socCase = await createSocCase({
+        title: `Archivo sospechoso: ${file.name}`,
+        case_type: 'file',
+        status: 'open',
+        severity: result.severity,
+        description: result.recommendation,
+        reported_by_id: worker?.id,
+      })
+      await createFileAnalysis({
+        case_id: socCase.id,
+        file_name: file.name,
+        file_extension: result.extension,
+        file_size: file.size,
+        mime_type: file.type,
+        sha256_hash: hash ?? undefined,
+        risk_score: result.score,
+        severity: result.severity,
+        recommendation: result.recommendation,
+      })
+      onCaseSaved?.()
+    } catch {
+      toast.error('No se pudo guardar el caso. Inténtalo de nuevo.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -112,6 +149,11 @@ export default function FileTriageAnalyzer() {
               <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-0.5">Recomendación</p>
               <p className="text-xs text-blue-600 dark:text-blue-300">{result.recommendation}</p>
             </div>
+
+            <Button onClick={handleSaveCase} disabled={saving} size="sm" variant="outline" className="w-full sm:w-auto">
+              <Save size={14} />
+              {saving ? 'Guardando...' : 'Guardar caso'}
+            </Button>
           </div>
         </div>
       )}

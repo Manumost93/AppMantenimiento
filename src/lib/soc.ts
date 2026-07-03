@@ -1,18 +1,98 @@
-// SOC Lite — tipos y utilidades compartidas (Fase 1-2 del roadmap SmartOps)
+// SOC Lite — tipos y utilidades compartidas (Fase 1-5 del roadmap SmartOps)
 
 export type SocCaseType = 'url' | 'email' | 'file' | 'event'
 export type SocSeverity = 'low' | 'medium' | 'high' | 'critical'
 export type SocStatus = 'open' | 'reviewing' | 'closed' | 'false_positive'
 
-export interface SocCase {
+interface SocWorkerRef {
+  id: number
+  name: string
+  color: string
+}
+
+// Fila real de soc_cases (Fase 5 — ver database/soc_lite_schema.sql)
+export interface SocCaseRecord {
   id: number
   title: string
-  type: SocCaseType
-  severity: SocSeverity
+  case_type: SocCaseType
   status: SocStatus
-  date: string
-  recommendation: string
-  responsible: string
+  severity: SocSeverity
+  description?: string
+  reported_by_id?: number
+  assigned_to_id?: number
+  reported_by?: SocWorkerRef
+  assigned_to?: SocWorkerRef
+  created_at: string
+  updated_at: string
+  closed_at?: string
+}
+
+export interface SocUrlAnalysisRecord {
+  id: number
+  case_id: number
+  url: string
+  domain?: string
+  uses_https: boolean
+  has_ip_address: boolean
+  url_length?: number
+  suspicious_keywords: string[]
+  risk_score: number
+  severity: SocSeverity
+  recommendation?: string
+  created_at: string
+}
+
+export interface SocEmailAnalysisRecord {
+  id: number
+  case_id: number
+  sender?: string
+  subject?: string
+  body_excerpt?: string
+  extracted_links: string[]
+  suspicious_keywords: string[]
+  has_attachments: boolean
+  attachment_names: string[]
+  risk_score: number
+  severity: SocSeverity
+  recommendation?: string
+  created_at: string
+}
+
+export interface SocFileAnalysisRecord {
+  id: number
+  case_id: number
+  file_name: string
+  file_extension?: string
+  file_size?: number
+  mime_type?: string
+  sha256_hash?: string
+  storage_path?: string
+  risk_score: number
+  severity: SocSeverity
+  recommendation?: string
+  created_at: string
+}
+
+export interface SocSecurityEventRecord {
+  id: number
+  case_id: number
+  event_type: string
+  affected_area?: string
+  affected_system?: string
+  source?: string
+  details?: string
+  risk_score: number
+  severity: SocSeverity
+  created_at: string
+}
+
+export interface SocStats {
+  openCases: number
+  criticalCases: number
+  urlsAnalyzed: number
+  emailsReviewed: number
+  filesReviewed: number
+  securityEvents: number
 }
 
 export const SEVERITY_META: Record<SocSeverity, { label: string; className: string }> = {
@@ -250,6 +330,10 @@ function extractLinks(text: string): string[] {
   return Array.from(new Set(matches))
 }
 
+export function parseAttachmentNames(raw: string): string[] {
+  return raw.split(/[,;\n]/).map(a => a.trim()).filter(Boolean)
+}
+
 export function analyzeEmail(input: EmailAnalysisInput): EmailAnalysisResult {
   const reasons: string[] = []
   let score = 0
@@ -310,10 +394,7 @@ export function analyzeEmail(input: EmailAnalysisInput): EmailAnalysisResult {
     }
   }
 
-  const attachmentList = input.attachmentNames
-    .split(/[,;\n]/)
-    .map(a => a.trim())
-    .filter(Boolean)
+  const attachmentList = parseAttachmentNames(input.attachmentNames)
   const suspiciousAttachments = attachmentList.filter(name =>
     DANGEROUS_ATTACHMENT_EXTENSIONS.some(ext => name.toLowerCase().endsWith(ext))
   )
