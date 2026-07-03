@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  Server,
+  Server, Gauge,
   Plus, Search, Edit2, Trash2, Layers, AlertTriangle, WifiOff, Wrench, CalendarClock, Sparkles,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -10,11 +10,13 @@ import { Dialog } from '@/components/ui/dialog'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/contexts/ConfirmContext'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
-import { getEdgeAssets, upsertEdgeAsset, deleteEdgeAsset, getProviders } from '@/lib/supabase'
+import { getEdgeAssets, upsertEdgeAsset, deleteEdgeAsset, getProviders, getEdgeSensorReadings, getSocCases } from '@/lib/supabase'
 import type { EdgeAsset, EdgeAssetType, EdgeAssetCriticality, EdgeAssetStatus, Provider } from '@/types'
 import { cn, formatCurrency, todayIso } from '@/lib/utils'
 import { PageLoading } from '@/components/Skeleton'
 import { ASSET_TYPE_META, CRITICALITY_META, STATUS_META, isUpcomingCheck } from '@/lib/edgeAssets'
+import { calculateEdgeAssetRisk, getRecentReadingsForAsset, type EdgeAssetRisk } from '@/lib/edgeRisk'
+import type { SensorReading } from '@/lib/edgeSensors'
 
 const inputClass = 'w-full text-sm border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-800 dark:text-slate-200'
 const labelClass = 'block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1'
@@ -47,6 +49,8 @@ export default function EdgeAssetsPage() {
   const confirm = useConfirm()
   const { data: assets, setData: setAssets, loading } = useRealtimeTable('edge_assets', getEdgeAssets)
   const [providers, setProviders] = useState<Provider[]>([])
+  const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([])
+  const [openSecurityEventsCount, setOpenSecurityEventsCount] = useState(0)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -58,7 +62,18 @@ export default function EdgeAssetsPage() {
 
   useEffect(() => {
     getProviders().then(setProviders)
+    getEdgeSensorReadings().then(setSensorReadings)
+    getSocCases().then(cases => setOpenSecurityEventsCount(cases.filter(c => c.case_type === 'event' && c.status === 'open').length))
   }, [])
+
+  const risks = new Map<number, EdgeAssetRisk>(
+    assets.map(a => [a.id, calculateEdgeAssetRisk(a, getRecentReadingsForAsset(sensorReadings, a.id), openSecurityEventsCount)])
+  )
+  const topRisks = [...assets]
+    .map(a => ({ asset: a, risk: risks.get(a.id)! }))
+    .sort((a, b) => b.risk.score - a.risk.score)
+    .slice(0, 5)
+    .filter(r => r.risk.score >= 31)
 
   const filtered = assets.filter(a =>
     (!search ||
@@ -79,6 +94,7 @@ export default function EdgeAssetsPage() {
     { label: 'Offline', value: assets.filter(a => a.status === 'offline').length, icon: WifiOff, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/30' },
     { label: 'En mantenimiento', value: assets.filter(a => a.status === 'maintenance').length, icon: Wrench, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/30' },
     { label: 'Próximas revisiones', value: assets.filter(a => isUpcomingCheck(a.next_check_date)).length, icon: CalendarClock, color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-900/30' },
+    { label: 'Riesgo alto/crítico', value: [...risks.values()].filter(r => r.score >= 61).length, icon: Gauge, color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-900/30' },
   ]
 
   function openCreate() {
@@ -165,7 +181,7 @@ export default function EdgeAssetsPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpis.map(kpi => {
           const Icon = kpi.icon
           return (
@@ -181,6 +197,33 @@ export default function EdgeAssetsPage() {
           )
         })}
       </div>
+
+      {/* Ranking de riesgo */}
+      {topRisks.length > 0 && (
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              <Gauge size={13} /> Ranking de mayor riesgo
+            </p>
+            <ul className="space-y-2.5">
+              {topRisks.map(({ asset, risk }) => (
+                <li key={asset.id} className="text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-700 dark:text-slate-300 truncate">{asset.name}</span>
+                    <span className={cn('font-bold shrink-0 ml-2',
+                      risk.severity === 'critical' ? 'text-red-600 dark:text-red-400' :
+                      risk.severity === 'high' ? 'text-orange-600 dark:text-orange-400' :
+                      'text-amber-600 dark:text-amber-400')}>
+                      {risk.score}/100
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500">{risk.reasons.slice(0, 3).join(' · ')}</p>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-2">
@@ -228,6 +271,7 @@ export default function EdgeAssetsPage() {
           {filtered.map(asset => {
             const TypeIcon = ASSET_TYPE_META[asset.asset_type].icon
             const upcoming = isUpcomingCheck(asset.next_check_date)
+            const risk = risks.get(asset.id)!
             return (
               <Card key={asset.id}>
                 <CardContent className="pt-4">
@@ -254,6 +298,17 @@ export default function EdgeAssetsPage() {
                   <div className="flex items-center gap-1.5 flex-wrap mt-2">
                     <Badge className={CRITICALITY_META[asset.criticality].className}>{CRITICALITY_META[asset.criticality].label}</Badge>
                     <Badge className={STATUS_META[asset.status].className}>{STATUS_META[asset.status].label}</Badge>
+                    <span
+                      className={cn('ml-auto inline-flex items-center gap-1 text-xs font-bold',
+                        risk.severity === 'critical' ? 'text-red-600 dark:text-red-400' :
+                        risk.severity === 'high' ? 'text-orange-600 dark:text-orange-400' :
+                        risk.severity === 'medium' ? 'text-amber-600 dark:text-amber-400' :
+                        'text-gray-400 dark:text-slate-500')}
+                      title={risk.reasons.join(' · ')}
+                    >
+                      <Gauge size={12} />
+                      {risk.score}
+                    </span>
                   </div>
 
                   <div className="text-xs text-gray-500 dark:text-slate-400 mt-2 space-y-0.5">
