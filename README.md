@@ -1,7 +1,10 @@
-# IKEA Mantenimiento — Gestión de Equipo v2.3
+# IKEA Mantenimiento — Facility Tech & SmartOps Platform (v3.0)
 
-**Aplicación web progresiva (PWA) para la gestión interna del equipo de mantenimiento de IKEA.**  
-Funciona en cualquier dispositivo: móvil, tablet y escritorio. Instalable en la pantalla de inicio sin necesidad de tienda de apps.
+**Aplicación web progresiva (PWA) real, en uso diario por el equipo de mantenimiento de IKEA Alcorcón**, que centraliza tareas de mantenimiento, incidencias, documentación, proveedores y operaciones internas. Funciona en cualquier dispositivo — móvil, tablet y escritorio — e instalable en la pantalla de inicio sin tienda de apps.
+
+Desde 2026 se está evolucionando de forma incremental hacia una plataforma **SmartOps**: un módulo de **SOC Lite** con análisis defensivo local de enlaces, correos y archivos sospechosos, y un módulo **Edge / Data Center Lite** con inventario de activos críticos, monitorización simulada, cálculo de riesgo por activo y trazabilidad de eventos de seguridad — pensado para demostrar habilidades de Smart Building, Edge Computing y Data Center Operations.
+
+No es una demo ni un proyecto de prueba: es la aplicación real que usa el equipo cada día, evolucionada por fases pequeñas y probadas, sin interrumpir su funcionamiento.
 
 ---
 
@@ -11,8 +14,8 @@ Funciona en cualquier dispositivo: móvil, tablet y escritorio. Instalable en la
 |---|---|
 | **Aplicación** | IKEA Mantenimiento |
 | **Desarrollado por** | **Manuel Honrado Vega** |
-| **Versión** | 2.3.0 |
-| **Año** | 2025 |
+| **Versión** | 3.0.0 |
+| **Año** | 2026 |
 | **Uso** | Interno · Equipo de Mantenimiento IKEA Alcorcón |
 
 ---
@@ -55,6 +58,23 @@ Funciona en cualquier dispositivo: móvil, tablet y escritorio. Instalable en la
 - **Informes** — Estadísticas y gráficos de costes *(solo admin)*
 - **Configuración** — Secciones, PIN, seguridad *(solo admin)*
 
+### SmartOps — Operaciones críticas y seguridad defensiva
+
+- **SOC Lite** — Registro y análisis defensivo de incidentes de seguridad, 100% local (nada se envía a servicios externos):
+  - **Analizador de URLs** — HTTPS, IP en vez de dominio, acortadores, suplantación de marca, palabras habituales en phishing → score 0-100 y recomendación
+  - **Analizador de correos** — remitente, lenguaje de urgencia/presión, peticiones de datos sensibles, enlaces y adjuntos peligrosos
+  - **Triage de archivos** — metadatos (extensión, tamaño, tipo MIME), hash SHA-256 (Web Crypto API nativa del navegador), detección de doble extensión disfrazada — sin ejecutar ni subir el archivo a ningún sitio
+  - **Registro de eventos de seguridad** — físicos o lógicos, con severidad y activo afectado opcional
+  - Todos los casos se persisten en Supabase y quedan trazados en el **Audit Log**
+- **Edge / Data Center Lite** — Inventario y operación de infraestructura crítica (racks, servidores edge, switches, firewalls, SAI, HVAC, CCTV, control de accesos, cuadros eléctricos, generadores...):
+  - **Activos Críticos** — CRUD completo, coste de reparación por activo, filtros por tipo/estado/criticidad
+  - **Dashboard EdgeOps** — KPIs, gráficas (por tipo, estado, ubicación, severidad) y evolución mensual de eventos, derivado al 100% de datos reales ya persistidos
+  - **Monitorización** — sensores simulados (temperatura, humedad, consumo eléctrico, SAI, red, puertas técnicas, CCTV) con reglas de alerta fijas y explicables — sin hardware real conectado
+  - **Risk Score** — puntuación 0-100 por activo, calculada en frontend a partir de 6 factores (criticidad, estado, revisiones de mantenimiento, lecturas de sensores recientes, eventos de seguridad vinculados al activo, proveedor asignado)
+- **Audit Log** — Trazabilidad de acciones importantes (creación/cierre de casos SOC, altas/bajas de activos críticos), solo visible para administradores
+
+> Todo el análisis de SOC Lite es **estático y defensivo**: no hay escaneo de redes reales, no se ejecutan archivos, no se abren URLs automáticamente y no se envían datos a servicios de terceros. La monitorización de sensores es **simulada**: no hay integración con hardware.
+
 ### Características transversales
 - **Actualización automática en tiempo real** — Todos los módulos se actualizan al instante cuando otro compañero hace cambios. Sin necesidad de recargar la página.
 - **Notificaciones toast** — Feedback visual inmediato en todas las acciones (guardar, eliminar, completar) sin bloquear la pantalla
@@ -72,6 +92,15 @@ Funciona en cualquier dispositivo: móvil, tablet y escritorio. Instalable en la
 ---
 
 ## Historial de versiones
+
+### v3.0.0 (2026)
+**Evolución SmartOps — SOC Lite + Edge / Data Center Lite**
+
+- **SOC Lite** — Página nueva con KPIs, tabs por tipo de caso y tabla de casos. Analizadores de URL, correo y archivo con triage local (hash SHA-256 vía Web Crypto API, sin dependencias nuevas). Registro manual de eventos de seguridad. Persistencia completa en Supabase (`soc_cases` + tablas de detalle por tipo de análisis).
+- **Edge / Data Center Lite** — Inventario de activos críticos (17 tipos, criticidad, estado, coste de reparación) con CRUD completo y datos de ejemplo cargables desde la propia app (sin tocar SQL). Dashboard EdgeOps con gráficas SVG/CSS puras, sin librería de charting. Sensores simulados con reglas de alerta fijas (temperatura, humedad, SAI, red, puertas, CCTV). Risk Score por activo con 6 factores explicables, sin IA.
+- **Audit Log** — Trazabilidad "fire and forget" (nunca bloquea la acción que audita), conectada a la creación/cierre de casos SOC y altas/bajas de activos críticos.
+- Eventos de seguridad vinculables a un activo concreto (`affected_asset_id`), usados por el Risk Score para un cálculo preciso por activo en vez de una aproximación genérica.
+- Roadmap de 12 fases implementado de forma incremental: cada fase se probó de forma aislada antes de pasar a la siguiente, sin tocar ningún módulo existente salvo rutas y menú.
 
 ### v2.3.0 (2025)
 **Realtime, UX y calidad**
@@ -193,10 +222,22 @@ ALTER TABLE general_repairs ADD COLUMN IF NOT EXISTS photos TEXT[] DEFAULT '{}':
 ALTER TABLE cbre_jobs       ADD COLUMN IF NOT EXISTS photos TEXT[] DEFAULT '{}'::TEXT[];
 ```
 
+### SQL de SmartOps (ejecutar en orden, carpeta `database/`)
+
+| Fase | Archivo | Qué añade |
+|---|---|---|
+| SOC Lite | `soc_lite_schema.sql` | `soc_cases`, `soc_url_analysis`, `soc_email_analysis`, `soc_file_analysis`, `soc_security_events` |
+| Audit Log | `audit_log_schema.sql` | `audit_logs` |
+| Edge Assets | `edge_assets_schema.sql` | `edge_assets` |
+| Sensores simulados | `edge_sensor_readings_schema.sql` | `edge_sensor_readings` |
+| Vínculo evento↔activo | `edge_security_events_link.sql` | columna `affected_asset_id` en `soc_security_events` |
+
+Todas siguen el mismo patrón que el resto del proyecto: `CREATE TABLE IF NOT EXISTS`, `CHECK` constraints en vez de enums de Postgres, y RLS `anon_all_*` (acceso completo con la anon key — app interna de equipo, sin roles a nivel de base de datos). No modifican ninguna tabla existente.
+
 ### Activar Realtime
 
 Supabase → **Database** → **Replication** → habilitar todas las tablas que necesiten tiempo real:
-`tasks`, `general_repairs`, `cbre_jobs`, `security_incidents`, `kone_incidents`, `comin_ion_jobs`, `food_incidents`, `bms_equipment`, `bms_incidents`, `rondas`, `meetings`, `waste_requests`
+`tasks`, `general_repairs`, `cbre_jobs`, `security_incidents`, `kone_incidents`, `comin_ion_jobs`, `food_incidents`, `bms_equipment`, `bms_incidents`, `rondas`, `meetings`, `waste_requests`, `soc_cases`, `edge_assets`, `audit_logs`
 
 ### Buckets de Storage
 
@@ -243,6 +284,9 @@ Despliegue automático en **Vercel** al hacer push a `main`.
 | OCR | Tesseract.js (lectura de contadores) |
 | PWA | vite-plugin-pwa + Workbox |
 | Despliegue | Vercel (auto-deploy desde GitHub) |
+| Hash de archivos (SOC Lite) | Web Crypto API nativa del navegador — sin librería |
+
+El módulo SmartOps (SOC Lite + Edge/Data Center Lite) no añadió ninguna dependencia nueva al proyecto — todo el análisis, las gráficas y el hash de archivos se implementaron con lo que ya había disponible.
 
 ---
 
@@ -268,6 +312,10 @@ src/
 │   ├── ConfirmDialog.tsx          ← Dialog de confirmación personalizado
 │   ├── PhotoUpload.tsx            ← Subida de fotos con cámara/galería (v2.2)
 │   ├── Skeleton.tsx               ← PageLoading, SkeletonCard, SkeletonTable, SkeletonKpis
+│   ├── UrlAnalyzer.tsx            ← Analizador de URLs (v3.0)
+│   ├── EmailAnalyzer.tsx          ← Analizador de correos (v3.0)
+│   ├── FileTriageAnalyzer.tsx     ← Triage de archivos + hash SHA-256 (v3.0)
+│   ├── SecurityEventForm.tsx      ← Registro de eventos de seguridad (v3.0)
 │   └── ui/                        ← Card, Dialog (bottom-sheet en móvil), Button, Badge
 ├── pages/
 │   ├── DashboardPage.tsx          ← Realtime en tasks + general_repairs
@@ -287,12 +335,41 @@ src/
 │   ├── MyAreaPage.tsx
 │   ├── ReportsPage.tsx
 │   ├── SettingsPage.tsx
-│   └── LoginPage.tsx
+│   ├── LoginPage.tsx
+│   ├── SocLitePage.tsx            ← SOC Lite: KPIs, tabs, tabla de casos (v3.0)
+│   ├── EdgeAssetsPage.tsx         ← Inventario de activos + Risk Score (v3.0)
+│   ├── EdgeOpsDashboardPage.tsx   ← Dashboard EdgeOps (v3.0)
+│   ├── EdgeMonitoringPage.tsx     ← Sensores simulados (v3.0)
+│   └── AuditLogPage.tsx           ← Audit Log, solo admin (v3.0)
 ├── lib/
 │   ├── supabase.ts                ← CRUD completo + uploadRepairPhoto + patchRepairPhotos
-│   └── utils.ts
-└── types/index.ts                 ← 25+ modelos de datos (GeneralRepair con photos[], etc.)
+│   ├── utils.ts
+│   ├── soc.ts                     ← Tipos + analyzeUrl/analyzeEmail/analyzeFile (v3.0)
+│   ├── edgeAssets.ts               ← Tipos compartidos + computeRackRisk() (v3.0)
+│   ├── edgeSensors.ts              ← Reglas de sensores + generador simulado (v3.0)
+│   └── edgeRisk.ts                 ← calculateEdgeAssetRisk() (v3.0)
+└── types/index.ts                 ← 25+ modelos de datos (GeneralRepair con photos[], EdgeAsset, AuditLog, etc.)
 ```
+
+---
+
+## Habilidades demostradas
+
+Este proyecto es real, usado a diario, y sirve como muestra práctica de:
+
+- **Frontend**: React 18, TypeScript, arquitectura de componentes, gestión de estado, formularios, tablas/filtros/dashboards sin librerías pesadas
+- **Backend / datos**: Supabase (PostgreSQL, Realtime, Storage), diseño de modelos de datos, RLS, CRUD real sobre una base de datos en producción
+- **Seguridad defensiva**: SOC Lite (análisis estático de URLs/correos/archivos, reglas explicables, sin IA ni escaneo ofensivo), trazabilidad con Audit Log
+- **Facility Management / Smart Building**: mantenimiento preventivo, gestión de proveedores e incidencias en un entorno real (IKEA Alcorcón)
+- **Edge Computing / Data Center Operations**: inventario de activos críticos, monitorización ambiental simulada, cálculo de riesgo por activo
+- **Automatización y análisis de riesgo**: reglas de scoring propias (URL, correo, archivo, Risk Score de activos), sin dependencias externas
+- **PWA**: aplicación instalable, funcionamiento offline básico, actualización automática
+- **Despliegue**: Vercel con auto-deploy desde GitHub
+- **Documentación y trabajo por fases**: roadmap incremental de 12 fases, cada una con SQL propuesto, probada de forma aislada y sin romper producción
+
+## Capturas recomendadas
+
+Para presentar el proyecto (README, portfolio, LinkedIn), las vistas que mejor lo representan son: Dashboard principal, SOC Lite (listado de casos + un analizador con resultado), Dashboard EdgeOps (KPIs y gráficas), y una tarjeta de Activos Críticos con su Risk Score. *(Pendiente de añadir capturas reales — no incluidas aquí para no usar datos de producción.)*
 
 ---
 
@@ -306,7 +383,10 @@ src/
 | v2.2 | ✅ | Fotos en Reparaciones/CBRE, Rondas mejoradas (OCR+historial+edición), módulos CBRE y BMS |
 | v2.3 | ✅ | Tiempo real en toda la app, sistema toast, confirm global, auto-coste, skeleton loaders |
 | v2.4 | 📋 | Fotos en FOOD/Seguridad/KONE, export PDF en más módulos, búsqueda global |
+| v3.0 | ✅ | SOC Lite (analizadores + eventos), Edge/Data Center Lite (activos, dashboard, sensores, Risk Score), Audit Log |
+| v3.1 | 📋 | Integrar Audit Log en login (correcto/fallido) — pendiente por ser el flujo más sensible de la app |
+| v3.2 | 📋 | Historial de costes de reparación por activo (tabla dedicada, en vez del campo acumulado actual) |
 
 ---
 
-*Desarrollado por Manuel Honrado Vega — IKEA Mantenimiento v2.3.0 · 2025*
+*Desarrollado por Manuel Honrado Vega — IKEA Mantenimiento v3.0.0 · 2026*
