@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  Server, Gauge,
+  Server, Gauge, History as HistoryIcon,
   Plus, Search, Edit2, Trash2, Layers, AlertTriangle, WifiOff, Wrench, CalendarClock, Sparkles,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,9 +9,13 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog } from '@/components/ui/dialog'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/contexts/ConfirmContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
-import { getEdgeAssets, upsertEdgeAsset, deleteEdgeAsset, getProviders, getEdgeSensorReadings, getSocCases, getSecurityEvents } from '@/lib/supabase'
-import type { EdgeAsset, EdgeAssetType, EdgeAssetCriticality, EdgeAssetStatus, Provider } from '@/types'
+import {
+  getEdgeAssets, upsertEdgeAsset, deleteEdgeAsset, getProviders, getEdgeSensorReadings, getSocCases, getSecurityEvents,
+  getEdgeAssetRepairs, createEdgeAssetRepair,
+} from '@/lib/supabase'
+import type { EdgeAsset, EdgeAssetType, EdgeAssetCriticality, EdgeAssetStatus, Provider, EdgeAssetRepair } from '@/types'
 import { cn, formatCurrency, todayIso } from '@/lib/utils'
 import { PageLoading } from '@/components/Skeleton'
 import { ASSET_TYPE_META, CRITICALITY_META, STATUS_META, isUpcomingCheck } from '@/lib/edgeAssets'
@@ -47,6 +51,7 @@ const SEED_ASSETS: Partial<EdgeAsset>[] = [
 export default function EdgeAssetsPage() {
   const toast = useToast()
   const confirm = useConfirm()
+  const { worker } = useAuth()
   const { data: assets, setData: setAssets, loading } = useRealtimeTable('edge_assets', getEdgeAssets)
   const [providers, setProviders] = useState<Provider[]>([])
   const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([])
@@ -59,6 +64,15 @@ export default function EdgeAssetsPage() {
   const [selected, setSelected] = useState<EdgeAsset | null>(null)
   const [form, setForm] = useState<Partial<EdgeAsset>>({})
   const [saving, setSaving] = useState(false)
+
+  // Historial de reparaciones (v3.2)
+  const [historyAsset, setHistoryAsset] = useState<EdgeAsset | null>(null)
+  const [repairs, setRepairs] = useState<EdgeAssetRepair[]>([])
+  const [loadingRepairs, setLoadingRepairs] = useState(false)
+  const [newRepair, setNewRepair] = useState<{ date: string; description: string; material_cost: number; labor_cost: number }>(
+    { date: todayIso(), description: '', material_cost: 0, labor_cost: 0 }
+  )
+  const [savingRepair, setSavingRepair] = useState(false)
 
   useEffect(() => {
     getProviders().then(setProviders)
@@ -142,6 +156,35 @@ export default function EdgeAssetsPage() {
       toast.success('Activo eliminado')
     } catch {
       toast.error('No se pudo eliminar.')
+    }
+  }
+
+  function openHistory(asset: EdgeAsset) {
+    setHistoryAsset(asset)
+    setNewRepair({ date: todayIso(), description: '', material_cost: 0, labor_cost: 0 })
+    setLoadingRepairs(true)
+    getEdgeAssetRepairs(asset.id).then(setRepairs).finally(() => setLoadingRepairs(false))
+  }
+
+  async function handleAddRepair() {
+    if (!historyAsset || !newRepair.description.trim()) return
+    setSavingRepair(true)
+    try {
+      const saved = await createEdgeAssetRepair({
+        asset_id: historyAsset.id,
+        date: newRepair.date,
+        description: newRepair.description,
+        material_cost: newRepair.material_cost,
+        labor_cost: newRepair.labor_cost,
+        created_by_id: worker?.id,
+      })
+      setRepairs(prev => [saved, ...prev])
+      setNewRepair({ date: todayIso(), description: '', material_cost: 0, labor_cost: 0 })
+      toast.success('Reparación registrada')
+    } catch {
+      toast.error('No se pudo guardar la reparación.')
+    } finally {
+      setSavingRepair(false)
     }
   }
 
@@ -295,6 +338,9 @@ export default function EdgeAssetsPage() {
                       </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
+                      <button onClick={() => openHistory(asset)} className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/30 rounded transition-colors" title="Historial de reparaciones">
+                        <HistoryIcon size={14} />
+                      </button>
                       <button onClick={() => openEdit(asset)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors">
                         <Edit2 size={14} />
                       </button>
@@ -438,6 +484,62 @@ export default function EdgeAssetsPage() {
             <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)} disabled={saving}>Cancelar</Button>
             <Button className="flex-1" onClick={handleSave} disabled={saving || !form.name?.trim()}>
               {saving ? 'Guardando...' : selected ? 'Guardar' : 'Crear'}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Dialog historial de reparaciones (v3.2) */}
+      <Dialog open={!!historyAsset} onClose={() => setHistoryAsset(null)} title={historyAsset ? `Historial · ${historyAsset.name}` : ''} size="lg">
+        <div className="p-5 space-y-4">
+          {loadingRepairs ? (
+            <p className="text-xs text-gray-400 dark:text-slate-500">Cargando...</p>
+          ) : repairs.length === 0 ? (
+            <p className="text-xs text-gray-400 dark:text-slate-500">Todavía no hay reparaciones registradas para este activo.</p>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {repairs.map(r => (
+                <div key={r.id} className="border border-gray-100 dark:border-slate-700 rounded-lg px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-700 dark:text-slate-300">
+                      {new Date(r.date + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </span>
+                    <span className="text-xs font-bold text-gray-800 dark:text-slate-100">{formatCurrency(r.total_cost)}</span>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-slate-300 mt-0.5">{r.description}</p>
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-0.5">
+                    Material: {formatCurrency(r.material_cost)} · Mano de obra: {formatCurrency(r.labor_cost)}
+                    {r.created_by && ` · ${r.created_by.name}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border-t border-gray-100 dark:border-slate-700 pt-4 space-y-3">
+            <p className={labelClass}>Añadir reparación</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Fecha</label>
+                <input type="date" className={inputClass} value={newRepair.date} max={todayIso()} onChange={e => setNewRepair(f => ({ ...f, date: e.target.value }))} />
+              </div>
+              <div>
+                <label className={labelClass}>Descripción *</label>
+                <input className={inputClass} placeholder="Ej: sustitución de ventilador" value={newRepair.description} onChange={e => setNewRepair(f => ({ ...f, description: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Coste material (€)</label>
+                <input type="number" min="0" step="0.01" className={inputClass} value={newRepair.material_cost} onChange={e => setNewRepair(f => ({ ...f, material_cost: Number(e.target.value) }))} />
+              </div>
+              <div>
+                <label className={labelClass}>Coste mano de obra (€)</label>
+                <input type="number" min="0" step="0.01" className={inputClass} value={newRepair.labor_cost} onChange={e => setNewRepair(f => ({ ...f, labor_cost: Number(e.target.value) }))} />
+              </div>
+            </div>
+            <Button size="sm" onClick={handleAddRepair} disabled={savingRepair || !newRepair.description.trim()}>
+              {savingRepair ? 'Guardando...' : 'Añadir reparación'}
             </Button>
           </div>
         </div>

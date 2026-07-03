@@ -461,3 +461,18 @@ export interface EdgeAsset {
   created_at: string
   updated_at: string
 }
+
+// Historial de reparaciones por activo (v3.2) — independiente de
+// EdgeAsset.repair_cost, que se mantiene como campo simple aparte.
+export interface EdgeAssetRepair {
+  id: number
+  asset_id: number
+  date: string
+  description: string
+  material_cost: number
+  labor_cost: number
+  total_cost: number
+  created_by_id?: number
+  created_by?: TeamMember
+  created_at: string
+}

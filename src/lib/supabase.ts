@@ -4,7 +4,7 @@ import type {
   CominIonJob, FoodIncident, GeneralRepair,
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
-  AuditLog, EdgeAsset,
+  AuditLog, EdgeAsset, EdgeAssetRepair,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -1164,4 +1164,37 @@ export async function createSensorReading(reading: Omit<SensorReading, 'id' | 'r
     })
   }
   return data as SensorReading
+}
+
+// ─── Historial de reparaciones por activo (v3.2) ───────────────────────────
+// SQL: database/edge_asset_repairs_schema.sql
+// Independiente de edge_assets.repair_cost, que se mantiene sin cambios.
+
+export async function getEdgeAssetRepairs(assetId: number): Promise<EdgeAssetRepair[]> {
+  const { data, error } = await supabase
+    .from('edge_asset_repairs')
+    .select('*, created_by:workers(id,name,color)')
+    .eq('asset_id', assetId)
+    .order('date', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(r => ({ ...r, created_by: r.created_by ?? undefined })) as EdgeAssetRepair[]
+}
+
+export async function createEdgeAssetRepair(repair: Omit<EdgeAssetRepair, 'id' | 'total_cost' | 'created_at' | 'created_by'>): Promise<EdgeAssetRepair> {
+  const { data, error } = await supabase
+    .from('edge_asset_repairs')
+    .insert(repair)
+    .select('*, created_by:workers(id,name,color)')
+    .single()
+  if (error) throw error
+  const result = { ...data, created_by: data.created_by ?? undefined } as EdgeAssetRepair
+  createAuditLog({
+    user_id: repair.created_by_id,
+    action: 'edge_asset_repair_logged',
+    module: 'edge_assets',
+    entity_type: 'edge_asset',
+    entity_id: repair.asset_id,
+    description: `Reparación registrada (${result.total_cost}€): ${repair.description}`,
+  })
+  return result
 }
