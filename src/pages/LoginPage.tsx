@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getWorkers, verifyPin, setWorkerPin } from '@/lib/supabase'
+import { getWorkers, verifyPin, setWorkerPin, createAuditLog } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import type { TeamMember } from '@/types'
 import { getInitials } from '@/lib/utils'
@@ -92,8 +92,10 @@ export default function LoginPage() {
     try {
       const ok = await verifyPin(selected.id, pin)
       if (ok) {
+        createAuditLog({ user_id: selected.id, user_name: selected.name, action: 'login_success', module: 'auth' })
         login(selected)
       } else {
+        createAuditLog({ user_id: selected.id, user_name: selected.name, action: 'login_failed', module: 'auth', severity: 'warning' })
         setError('PIN incorrecto. Inténtalo de nuevo.')
         setPin('')
       }
@@ -117,6 +119,7 @@ export default function LoginPage() {
     setVerifying(true)
     try {
       await setWorkerPin(selected.id, pin)
+      createAuditLog({ user_id: selected.id, user_name: selected.name, action: 'pin_created', module: 'auth' })
       login(selected)
     } catch {
       setError('Error al guardar el PIN.')
