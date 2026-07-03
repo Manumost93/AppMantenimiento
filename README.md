@@ -14,7 +14,7 @@ No es una demo ni un proyecto de prueba: es la aplicación real que usa el equip
 |---|---|
 | **Aplicación** | IKEA Mantenimiento |
 | **Desarrollado por** | **Manuel Honrado Vega** |
-| **Versión** | 3.2.0 |
+| **Versión** | 3.3.0 |
 | **Año** | 2026 |
 | **Uso** | Interno · Equipo de Mantenimiento IKEA Alcorcón |
 
@@ -92,6 +92,14 @@ No es una demo ni un proyecto de prueba: es la aplicación real que usa el equip
 ---
 
 ## Historial de versiones
+
+### v3.3.0 (2026)
+**KPIs clicables como filtro en todas las secciones con estado**
+
+- Patrón de Reparaciones (tarjeta KPI clicable con anillo activo, badge ✕ y breadcrumb "Mostrando: X (n) · Ver todas") extendido a Seguridad, CBRE, BMS, Residuos, KONE (revisiones e incidencias), COMIN/IOM y FOOD.
+- Corrige el filtro "Vencidos" de CBRE, que no coincidía con ningún estado real y no mostraba resultados.
+- Corrige las pastillas de estado de incidencias de BMS, que no tenían handler de click.
+- COMIN/IOM: botón para seleccionar trabajos concretos y exportar solo esos a PDF.
 
 ### v3.2.0 / v3.1.0 (2026)
 **Cierre de los pendientes de v3.0**

@@ -116,7 +116,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <div className="text-slate-400 font-medium text-[11px]">IKEA Mantenimiento</div>
           <div>Desarrollado por</div>
           <div className="text-slate-300 font-medium">Manuel Honrado Vega</div>
-          <div className="text-slate-600 mt-0.5">v2.0.0 · 2025</div>
+          <div className="text-slate-600 mt-0.5">v3.3.0 · 2026</div>
         </div>
       </div>
     </aside>
