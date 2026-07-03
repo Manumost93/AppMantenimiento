@@ -11,13 +11,15 @@ import { cn } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
 import UrlAnalyzer from '@/components/UrlAnalyzer'
 import EmailAnalyzer from '@/components/EmailAnalyzer'
+import FileTriageAnalyzer from '@/components/FileTriageAnalyzer'
 import { SEVERITY_META, STATUS_META, type SocCaseType, type SocCase } from '@/lib/soc'
 
-type AnalysisView = 'picker' | 'url' | 'email'
+type AnalysisView = 'picker' | 'url' | 'email' | 'file'
 
 const ANALYZER_TITLES: Record<Exclude<AnalysisView, 'picker'>, string> = {
   url: 'Analizar URL',
   email: 'Analizar correo',
+  file: 'Revisar archivo',
 }
 
 // Datos de ejemplo — Fase 1 (visual, sin Supabase todavía)
@@ -72,7 +74,7 @@ export default function SocLitePage() {
   ]
 
   function handlePickAnalysis(type: SocCaseType) {
-    if (type === 'url' || type === 'email') {
+    if (type === 'url' || type === 'email' || type === 'file') {
       setAnalysisView(type)
       return
     }
@@ -234,6 +236,7 @@ export default function SocLitePage() {
             </button>
             {analysisView === 'url' && <UrlAnalyzer />}
             {analysisView === 'email' && <EmailAnalyzer />}
+            {analysisView === 'file' && <FileTriageAnalyzer />}
           </div>
         )}
       </Dialog>

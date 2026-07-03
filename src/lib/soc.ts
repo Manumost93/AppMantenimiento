@@ -337,3 +337,96 @@ export function analyzeEmail(input: EmailAnalysisInput): EmailAnalysisResult {
     recommendation: EMAIL_RECOMMENDATIONS[severity],
   }
 }
+
+// ─── Triage de archivos — solo metadatos, nunca ejecuta ni sube      ───
+// ─── el archivo a ningún sitio. El hash se calcula en el navegador   ───
+// ─── con Web Crypto API.                                             ───
+
+export interface FileAnalysisInput {
+  fileName: string
+  fileSize: number
+  mimeType: string
+}
+
+export interface FileAnalysisResult {
+  score: number
+  severity: SocSeverity
+  reasons: string[]
+  extension: string
+  recommendation: string
+}
+
+const HIGH_RISK_EXTENSIONS = ['.exe', '.bat', '.cmd', '.scr', '.vbs', '.js', '.ps1', '.jar', '.msi', '.hta', '.lnk']
+const ARCHIVE_EXTENSIONS = ['.zip', '.rar', '.7z', '.iso']
+const MACRO_OFFICE_EXTENSIONS = ['.docm', '.xlsm', '.pptm']
+
+const SUSPICIOUS_FILE_NAME_WORDS = [
+  'factura', 'urgente', 'password', 'contraseña', 'contrasena', 'nomina', 'nómina', 'pago',
+  'login', 'update', 'seguridad', 'cuenta', 'banco', 'transferencia', 'recibo', 'pendiente', 'aviso',
+]
+
+const FILE_RECOMMENDATIONS: Record<SocSeverity, string> = {
+  low: 'No se detectan señales evidentes, pero valida siempre el remitente antes de abrir.',
+  medium: 'Revisar con precaución. Valida el remitente y revisa en un entorno controlado si es posible.',
+  high: 'No abrir el archivo. Valida el remitente por un canal alternativo y escala a tu responsable.',
+  critical: 'No abrir ni descargar en equipos corporativos. Escala de inmediato y mantén evidencias.',
+}
+
+function getExtension(fileName: string): string {
+  const idx = fileName.lastIndexOf('.')
+  return idx === -1 ? '' : fileName.slice(idx).toLowerCase()
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export function analyzeFile(input: FileAnalysisInput): FileAnalysisResult {
+  const reasons: string[] = []
+  let score = 0
+
+  const nameLower = input.fileName.toLowerCase()
+  const extension = getExtension(nameLower)
+
+  if (HIGH_RISK_EXTENSIONS.includes(extension)) {
+    reasons.push(`Extensión de alto riesgo: ${extension} (puede ejecutar código).`)
+    score += 45
+  } else if (MACRO_OFFICE_EXTENSIONS.includes(extension)) {
+    reasons.push(`Documento de Office con macros habilitadas: ${extension}.`)
+    score += 35
+  } else if (ARCHIVE_EXTENSIONS.includes(extension)) {
+    reasons.push(`Archivo comprimido: ${extension} (puede ocultar contenido malicioso).`)
+    score += 20
+  }
+
+  const doubleExtMatch = nameLower.match(/\.(pdf|docx?|xlsx?|jpe?g|png|txt)(\.[a-z0-9]{2,4})$/)
+  if (doubleExtMatch) {
+    reasons.push(`Doble extensión sospechosa (".${doubleExtMatch[1]}${doubleExtMatch[2]}") — técnica habitual para disfrazar ejecutables.`)
+    score += 30
+  }
+
+  const foundWords = SUSPICIOUS_FILE_NAME_WORDS.filter(w => nameLower.includes(w))
+  if (foundWords.length > 0) {
+    reasons.push(`Nombre con palabras habituales en phishing: ${foundWords.join(', ')}.`)
+    score += Math.min(foundWords.length * 6, 24)
+  }
+
+  score = Math.min(100, score)
+  const severity = severityFromScore(score)
+
+  return {
+    score,
+    severity,
+    reasons,
+    extension: extension || '(sin extensión)',
+    recommendation: FILE_RECOMMENDATIONS[severity],
+  }
+}
+
+export async function computeSha256(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
