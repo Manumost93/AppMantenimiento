@@ -28,6 +28,7 @@ const ReportsPage   = lazy(() => import('@/pages/ReportsPage'))
 const SettingsPage  = lazy(() => import('@/pages/SettingsPage'))
 const CBREPage      = lazy(() => import('@/pages/CBREPage'))
 const BmsPage       = lazy(() => import('@/pages/BmsPage'))
+const SocLitePage   = lazy(() => import('@/pages/SocLitePage'))
 
 function PageFallback() {
   return (
@@ -77,6 +78,7 @@ function AppRoutes() {
             <Route path="/reports"    element={<ReportsPage />} />
             <Route path="/cbre"       element={<CBREPage />} />
             <Route path="/bms"        element={<BmsPage />} />
+            <Route path="/soc-lite"   element={<SocLitePage />} />
             <Route path="/settings"   element={<SettingsPage />} />
             <Route path="*"           element={<Navigate to="/calendar" replace />} />
           </Routes>

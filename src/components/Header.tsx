@@ -25,6 +25,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/reports':   'Informes y estadísticas',
   '/settings':  'Configuración',
   '/rondas':    'Rondas de apertura y cierre',
+  '/soc-lite':  'SOC Lite · Análisis defensivo',
 }
 
 const PAGE_ICONS: Record<string, string> = {
@@ -44,6 +45,7 @@ const PAGE_ICONS: Record<string, string> = {
   '/reports':   '📊',
   '/settings':  '⚙️',
   '/rondas':    '📋',
+  '/soc-lite':  '🛰️',
 }
 
 function getTodayString() {

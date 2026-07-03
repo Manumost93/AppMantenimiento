@@ -3,7 +3,7 @@ import {
   Calendar, LayoutDashboard, User, Users, Truck, FolderOpen,
   Building2, Paintbrush2, UtensilsCrossed, Wrench,
   BarChart2, Settings, ChevronRight, Shield, ClipboardCheck, ShieldAlert, BookOpen, Trash2,
-  HardHat, Thermometer
+  HardHat, Thermometer, Radar
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -25,6 +25,7 @@ const navItems = [
   { path: '/team',      icon: Users,              label: 'Equipo',             section: 'manage', adminOnly: false },
   { path: '/providers', icon: Truck,              label: 'Proveedores/Contactos', section: 'manage', adminOnly: false },
   { path: '/documents', icon: FolderOpen,         label: 'Documentos',         section: 'manage', adminOnly: false },
+  { path: '/soc-lite',  icon: Radar,              label: 'SOC Lite',           section: 'manage', adminOnly: false },
   { path: '/reports',   icon: BarChart2,          label: 'Informes',           section: 'manage', adminOnly: true  },
   { path: '/settings',  icon: Settings,           label: 'Configuración',      section: 'config', adminOnly: true  },
 ]
