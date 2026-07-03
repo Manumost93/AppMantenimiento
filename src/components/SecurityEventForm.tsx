@@ -1,24 +1,31 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { createSocCase, createSecurityEvent } from '@/lib/supabase'
+import { createSocCase, createSecurityEvent, getEdgeAssets } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { SECURITY_EVENT_TYPES, SEVERITY_META, SEVERITY_MIDPOINT, type SocSeverity } from '@/lib/soc'
+import type { EdgeAsset } from '@/types'
 
 const SEVERITIES: SocSeverity[] = ['low', 'medium', 'high', 'critical']
 
 export default function SecurityEventForm({ onCaseSaved }: { onCaseSaved?: () => void }) {
   const { worker } = useAuth()
   const toast = useToast()
+  const [assets, setAssets] = useState<EdgeAsset[]>([])
   const [eventType, setEventType] = useState(SECURITY_EVENT_TYPES[0])
+  const [affectedAssetId, setAffectedAssetId] = useState<number | ''>('')
   const [affectedArea, setAffectedArea] = useState('')
   const [affectedSystem, setAffectedSystem] = useState('')
   const [source, setSource] = useState('')
   const [details, setDetails] = useState('')
   const [severity, setSeverity] = useState<SocSeverity>('medium')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    getEdgeAssets().then(setAssets)
+  }, [])
 
   const inputClass = 'w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500'
   const labelClass = 'text-xs font-medium text-gray-600 dark:text-slate-300 mb-1.5 block'
@@ -37,6 +44,7 @@ export default function SecurityEventForm({ onCaseSaved }: { onCaseSaved?: () =>
       await createSecurityEvent({
         case_id: socCase.id,
         event_type: eventType,
+        affected_asset_id: affectedAssetId || undefined,
         affected_area: affectedArea || undefined,
         affected_system: affectedSystem || undefined,
         source: source || undefined,
@@ -58,6 +66,14 @@ export default function SecurityEventForm({ onCaseSaved }: { onCaseSaved?: () =>
         <label className={labelClass}>Tipo de evento</label>
         <select value={eventType} onChange={e => setEventType(e.target.value)} className={inputClass}>
           {SECURITY_EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <label className={labelClass}>Activo afectado (opcional)</label>
+        <select value={affectedAssetId} onChange={e => setAffectedAssetId(e.target.value ? Number(e.target.value) : '')} className={inputClass}>
+          <option value="">Sin vincular a un activo</option>
+          {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </div>
 

@@ -71,12 +71,11 @@ export function calculateEdgeAssetRisk(
     reasons.push(`${warningReadings} lectura(s) de sensor en aviso (últimos 7 días)`)
   }
 
-  // Eventos de seguridad abiertos a nivel organización — hasta que un evento
-  // pueda vincularse a un activo concreto (Fase 11), suma un pequeño ajuste
-  // general en vez de intentar precisión que la BD todavía no soporta.
+  // Eventos de seguridad abiertos vinculados a este activo (Fase 11:
+  // soc_security_events.affected_asset_id)
   if (openSecurityEventsCount > 0) {
-    score += Math.min(openSecurityEventsCount * 3, 10)
-    reasons.push(`${openSecurityEventsCount} evento(s) de seguridad abiertos en la organización`)
+    score += Math.min(openSecurityEventsCount * 15, 30)
+    reasons.push(`${openSecurityEventsCount} evento(s) de seguridad abiertos sobre este activo`)
   }
 
   if (!asset.provider_id && (asset.criticality === 'critical' || asset.criticality === 'high')) {

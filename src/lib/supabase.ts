@@ -1048,10 +1048,26 @@ export async function createFileAnalysis(payload: Omit<SocFileAnalysisRecord, 'i
   return data as SocFileAnalysisRecord
 }
 
+const SOC_SECURITY_EVENT_SELECT = '*, affected_asset:edge_assets(id,name)'
+
 export async function createSecurityEvent(payload: Omit<SocSecurityEventRecord, 'id' | 'created_at'>): Promise<SocSecurityEventRecord> {
-  const { data, error } = await supabase.from('soc_security_events').insert(payload).select().single()
+  const { data, error } = await supabase
+    .from('soc_security_events')
+    .insert(payload)
+    .select(SOC_SECURITY_EVENT_SELECT)
+    .single()
   if (error) throw error
-  return data as SocSecurityEventRecord
+  return { ...data, affected_asset: data.affected_asset ?? undefined } as SocSecurityEventRecord
+}
+
+// Fase 11: eventos de seguridad con su activo enlazado (si tiene)
+export async function getSecurityEvents(): Promise<SocSecurityEventRecord[]> {
+  const { data, error } = await supabase
+    .from('soc_security_events')
+    .select(SOC_SECURITY_EVENT_SELECT)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(e => ({ ...e, affected_asset: e.affected_asset ?? undefined })) as SocSecurityEventRecord[]
 }
 
 export async function getSocStats(): Promise<SocStats> {

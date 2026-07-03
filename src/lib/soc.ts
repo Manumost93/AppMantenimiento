@@ -79,6 +79,8 @@ export interface SocSecurityEventRecord {
   event_type: string
   affected_area?: string
   affected_system?: string
+  affected_asset_id?: number
+  affected_asset?: { id: number; name: string }
   source?: string
   details?: string
   risk_score: number

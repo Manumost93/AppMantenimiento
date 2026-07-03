@@ -6,7 +6,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { getEdgeAssets, getSocCases, getAuditLogs } from '@/lib/supabase'
+import { getEdgeAssets, getSocCases, getAuditLogs, getSecurityEvents } from '@/lib/supabase'
 import type { EdgeAsset, AuditLog } from '@/types'
 import { SEVERITY_META as SOC_SEVERITY_META, type SocCaseRecord } from '@/lib/soc'
 import { ASSET_TYPE_META, CRITICALITY_META, STATUS_META, isOverdueCheck, computeRackRisk } from '@/lib/edgeAssets'
@@ -49,15 +49,19 @@ function BarRow({ label, count, max, colorClass }: { label: string; count: numbe
 export default function EdgeOpsDashboardPage() {
   const [assets, setAssets] = useState<EdgeAsset[]>([])
   const [events, setEvents] = useState<SocCaseRecord[]>([])
+  const [assetByCaseId, setAssetByCaseId] = useState<Map<number, string>>(new Map())
   const [alerts, setAlerts] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([getEdgeAssets(), getSocCases(), getAuditLogs()])
-      .then(([a, cases, logs]) => {
+    Promise.all([getEdgeAssets(), getSocCases(), getAuditLogs(), getSecurityEvents()])
+      .then(([a, cases, logs, secEvents]) => {
         setAssets(a)
         setEvents(cases.filter(c => c.case_type === 'event'))
         setAlerts(logs.filter(l => l.module === 'edge_assets' && (l.severity === 'warning' || l.severity === 'critical')))
+        setAssetByCaseId(new Map(
+          secEvents.filter(e => e.affected_asset).map(e => [e.case_id, e.affected_asset!.name])
+        ))
       })
       .finally(() => setLoading(false))
   }, [])
@@ -326,7 +330,12 @@ export default function EdgeOpsDashboardPage() {
                   <ul className="space-y-2">
                     {recentEvents.map(e => (
                       <li key={e.id} className="flex items-center justify-between text-xs gap-2">
-                        <span className="text-gray-700 dark:text-slate-300 truncate">{e.title}</span>
+                        <span className="text-gray-700 dark:text-slate-300 truncate">
+                          {e.title}
+                          {assetByCaseId.has(e.id) && (
+                            <span className="text-gray-400 dark:text-slate-500"> · {assetByCaseId.get(e.id)}</span>
+                          )}
+                        </span>
                         <div className="flex items-center gap-2 shrink-0">
                           <Badge className={SOC_SEVERITY_META[e.severity].className}>{SOC_SEVERITY_META[e.severity].label}</Badge>
                           <span className="text-gray-400 dark:text-slate-500">

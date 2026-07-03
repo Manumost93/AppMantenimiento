@@ -10,7 +10,7 @@ import { Dialog } from '@/components/ui/dialog'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/contexts/ConfirmContext'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
-import { getEdgeAssets, upsertEdgeAsset, deleteEdgeAsset, getProviders, getEdgeSensorReadings, getSocCases } from '@/lib/supabase'
+import { getEdgeAssets, upsertEdgeAsset, deleteEdgeAsset, getProviders, getEdgeSensorReadings, getSocCases, getSecurityEvents } from '@/lib/supabase'
 import type { EdgeAsset, EdgeAssetType, EdgeAssetCriticality, EdgeAssetStatus, Provider } from '@/types'
 import { cn, formatCurrency, todayIso } from '@/lib/utils'
 import { PageLoading } from '@/components/Skeleton'
@@ -50,7 +50,7 @@ export default function EdgeAssetsPage() {
   const { data: assets, setData: setAssets, loading } = useRealtimeTable('edge_assets', getEdgeAssets)
   const [providers, setProviders] = useState<Provider[]>([])
   const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([])
-  const [openSecurityEventsCount, setOpenSecurityEventsCount] = useState(0)
+  const [openEventsByAsset, setOpenEventsByAsset] = useState<Map<number, number>>(new Map())
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -63,11 +63,20 @@ export default function EdgeAssetsPage() {
   useEffect(() => {
     getProviders().then(setProviders)
     getEdgeSensorReadings().then(setSensorReadings)
-    getSocCases().then(cases => setOpenSecurityEventsCount(cases.filter(c => c.case_type === 'event' && c.status === 'open').length))
+    Promise.all([getSocCases(), getSecurityEvents()]).then(([cases, events]) => {
+      const openCaseIds = new Set(cases.filter(c => c.case_type === 'event' && c.status === 'open').map(c => c.id))
+      const counts = new Map<number, number>()
+      for (const e of events) {
+        if (e.affected_asset_id && openCaseIds.has(e.case_id)) {
+          counts.set(e.affected_asset_id, (counts.get(e.affected_asset_id) ?? 0) + 1)
+        }
+      }
+      setOpenEventsByAsset(counts)
+    })
   }, [])
 
   const risks = new Map<number, EdgeAssetRisk>(
-    assets.map(a => [a.id, calculateEdgeAssetRisk(a, getRecentReadingsForAsset(sensorReadings, a.id), openSecurityEventsCount)])
+    assets.map(a => [a.id, calculateEdgeAssetRisk(a, getRecentReadingsForAsset(sensorReadings, a.id), openEventsByAsset.get(a.id) ?? 0)])
   )
   const topRisks = [...assets]
     .map(a => ({ asset: a, risk: risks.get(a.id)! }))
