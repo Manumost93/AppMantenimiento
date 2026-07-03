@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/contexts/ConfirmContext'
-import { Plus, Trash2, Edit2, Search, FileDown } from 'lucide-react'
+import { Plus, Trash2, Edit2, Search, FileDown, ListChecks, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { getCominIonJobs, upsertCominIonJob, deleteCominIonJob, getWorkers } from '@/lib/supabase'
@@ -16,8 +16,11 @@ const PRIORITY_LABELS_ES: Record<string, string> = {
   low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'URGENTE',
 }
 
-function generateExternalPDF(jobs: CominIonJob[], contactName: string, contactPhone: string, filterMode: 'ion' | 'pending' | 'all') {
+type PdfFilterMode = 'ion' | 'pending' | 'all' | 'selected'
+
+function generateExternalPDF(jobs: CominIonJob[], contactName: string, contactPhone: string, filterMode: PdfFilterMode, selectedIds?: Set<number>) {
   const filtered = jobs.filter(j => {
+    if (filterMode === 'selected') return selectedIds?.has(j.id) ?? false
     if (filterMode === 'ion') return j.involves_ion && !['done', 'cancelled'].includes(j.status)
     if (filterMode === 'pending') return !['done', 'cancelled'].includes(j.status)
     return true
@@ -45,7 +48,7 @@ function generateExternalPDF(jobs: CominIonJob[], contactName: string, contactPh
   doc.text('LISTA DE TRABAJOS — EMPRESA EXTERNA', pw / 2, 9, { align: 'center' })
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
-  doc.text(filterMode === 'ion' ? 'IOM / DECORACIÓN' : 'COMIN / IOM', pw / 2, 14, { align: 'center' })
+  doc.text(filterMode === 'ion' ? 'IOM / DECORACIÓN' : filterMode === 'selected' ? 'SELECCIÓN MANUAL' : 'COMIN / IOM', pw / 2, 14, { align: 'center' })
 
   const dateW = 36
   doc.setFillColor(255, 255, 0)
@@ -139,7 +142,9 @@ export default function CominIonPage() {
   const [showPdfDialog, setShowPdfDialog] = useState(false)
   const [pdfContact, setPdfContact] = useState('')
   const [pdfPhone, setPdfPhone] = useState('')
-  const [pdfFilter, setPdfFilter] = useState<'ion' | 'pending' | 'all'>('pending')
+  const [pdfFilter, setPdfFilter] = useState<PdfFilterMode>('pending')
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     getWorkers().then(setWorkers)
@@ -186,6 +191,31 @@ export default function CominIonPage() {
     } catch { toast.error('No se pudo eliminar.') }
   }
 
+  function toggleSelectMode() {
+    setSelectMode(v => !v)
+    setSelectedIds(new Set())
+  }
+
+  function toggleSelectJob(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllVisible() {
+    setSelectedIds(prev =>
+      filtered.every(j => prev.has(j.id)) ? new Set() : new Set(filtered.map(j => j.id))
+    )
+  }
+
+  function openPdfForSelection() {
+    setPdfFilter('selected')
+    setShowPdfDialog(true)
+  }
+
   if (loading) return <PageLoading rows={5} />
 
   return (
@@ -195,12 +225,31 @@ export default function CominIonPage() {
           <h2 className="text-base font-bold text-gray-900">🎨 COMIN / IOM / Decoración</h2>
           <p className="text-xs text-gray-500">{jobs.length} trabajos · Coste real: {formatCurrency(totalCost)}</p>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowPdfDialog(true)}>
-            <FileDown size={14} />
-            PDF para externo
-          </Button>
-          <Button size="sm" onClick={openCreate}><Plus size={14} />Nuevo trabajo</Button>
+        <div className="flex gap-2 flex-wrap">
+          {selectMode ? (
+            <>
+              <Button size="sm" variant="outline" onClick={toggleSelectMode}>
+                <X size={14} />
+                Cancelar selección
+              </Button>
+              <Button size="sm" onClick={openPdfForSelection} disabled={selectedIds.size === 0}>
+                <FileDown size={14} />
+                Generar PDF ({selectedIds.size})
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button size="sm" variant="outline" onClick={toggleSelectMode}>
+                <ListChecks size={14} />
+                Seleccionar trabajos
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => { setPdfFilter('pending'); setShowPdfDialog(true) }}>
+                <FileDown size={14} />
+                PDF para externo
+              </Button>
+              <Button size="sm" onClick={openCreate}><Plus size={14} />Nuevo trabajo</Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -220,13 +269,35 @@ export default function CominIonPage() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm overflow-x-auto">
         <table className="w-full text-sm min-w-[600px]">
           <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>{['Fecha', 'Zona', 'Trabajo', 'Responsable', 'Coste est.', 'Coste real', 'IOM', 'Estado', ''].map(h => (
-              <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 uppercase">{h}</th>
-            ))}</tr>
+            <tr>
+              {selectMode && (
+                <th className="px-3 py-2.5 w-8">
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={filtered.length > 0 && filtered.every(j => selectedIds.has(j.id))}
+                    onChange={toggleSelectAllVisible}
+                  />
+                </th>
+              )}
+              {['Fecha', 'Zona', 'Trabajo', 'Responsable', 'Coste est.', 'Coste real', 'IOM', 'Estado', ''].map(h => (
+                <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 uppercase">{h}</th>
+              ))}
+            </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filtered.map(job => (
-              <tr key={job.id} className="hover:bg-gray-50">
+              <tr key={job.id} className={cn('hover:bg-gray-50', selectMode && selectedIds.has(job.id) && 'bg-blue-50')}>
+                {selectMode && (
+                  <td className="px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={selectedIds.has(job.id)}
+                      onChange={() => toggleSelectJob(job.id)}
+                    />
+                  </td>
+                )}
                 <td className="px-3 py-2.5 text-xs whitespace-nowrap">{formatDateShort(job.date)}</td>
                 <td className="px-3 py-2.5 text-xs">{job.affected_zone}</td>
                 <td className="px-3 py-2.5 text-xs max-w-[160px]">
@@ -355,38 +426,47 @@ export default function CominIonPage() {
               onChange={e => setPdfPhone(e.target.value)}
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">¿Qué incluir?</label>
-            <div className="space-y-2">
-              {([
-                { value: 'ion', label: 'Solo trabajos IOM pendientes', desc: 'Filtra por "Involucra IOM" y estado activo' },
-                { value: 'pending', label: 'Todos los trabajos pendientes', desc: 'Estado activo (excluye finalizados y cancelados)' },
-                { value: 'all', label: 'Todos los trabajos', desc: 'Lista completa sin filtrar por estado' },
-              ] as { value: typeof pdfFilter; label: string; desc: string }[]).map(opt => (
-                <label key={opt.value} className="flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="pdfFilter"
-                    value={opt.value}
-                    checked={pdfFilter === opt.value}
-                    onChange={() => setPdfFilter(opt.value)}
-                    className="mt-0.5"
-                  />
-                  <div>
-                    <p className="text-sm text-gray-700 font-medium">{opt.label}</p>
-                    <p className="text-xs text-gray-400">{opt.desc}</p>
-                  </div>
-                </label>
-              ))}
+          {pdfFilter === 'selected' ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+              <p className="text-sm text-blue-700 font-medium">{selectedIds.size} trabajo(s) seleccionado(s) manualmente</p>
+              <p className="text-xs text-blue-500 mt-0.5">Se incluirán solo los trabajos que marcaste en la tabla.</p>
             </div>
-          </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-2">¿Qué incluir?</label>
+              <div className="space-y-2">
+                {([
+                  { value: 'ion', label: 'Solo trabajos IOM pendientes', desc: 'Filtra por "Involucra IOM" y estado activo' },
+                  { value: 'pending', label: 'Todos los trabajos pendientes', desc: 'Estado activo (excluye finalizados y cancelados)' },
+                  { value: 'all', label: 'Todos los trabajos', desc: 'Lista completa sin filtrar por estado' },
+                ] as { value: PdfFilterMode; label: string; desc: string }[]).map(opt => (
+                  <label key={opt.value} className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pdfFilter"
+                      value={opt.value}
+                      checked={pdfFilter === opt.value}
+                      onChange={() => setPdfFilter(opt.value)}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm text-gray-700 font-medium">{opt.label}</p>
+                      <p className="text-xs text-gray-400">{opt.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex gap-2 pt-2 border-t border-gray-100">
             <Button variant="outline" className="flex-1" onClick={() => setShowPdfDialog(false)}>Cancelar</Button>
             <Button
               className="flex-1 bg-blue-600 hover:bg-blue-700"
+              disabled={pdfFilter === 'selected' && selectedIds.size === 0}
               onClick={() => {
-                generateExternalPDF(jobs, pdfContact, pdfPhone, pdfFilter)
+                generateExternalPDF(jobs, pdfContact, pdfPhone, pdfFilter, selectedIds)
                 setShowPdfDialog(false)
+                if (pdfFilter === 'selected') { setSelectMode(false); setSelectedIds(new Set()) }
               }}
             >
               <FileDown size={14} />
