@@ -14,7 +14,7 @@ No es una demo ni un proyecto de prueba: es la aplicación real que usa el equip
 |---|---|
 | **Aplicación** | IKEA Mantenimiento |
 | **Desarrollado por** | **Manuel Honrado Vega** |
-| **Versión** | 3.0.0 |
+| **Versión** | 3.2.0 |
 | **Año** | 2026 |
 | **Uso** | Interno · Equipo de Mantenimiento IKEA Alcorcón |
 
@@ -92,6 +92,12 @@ No es una demo ni un proyecto de prueba: es la aplicación real que usa el equip
 ---
 
 ## Historial de versiones
+
+### v3.2.0 / v3.1.0 (2026)
+**Cierre de los pendientes de v3.0**
+
+- **v3.1** — Login correcto, fallido y primera creación de PIN quedan registrados en Audit Log (`module: 'auth'`), sin tocar la tabla `workers` ni la lógica de verificación.
+- **v3.2** — Historial de reparaciones por activo (`edge_asset_repairs`, con `material_cost`/`labor_cost`/`total_cost` generado, mismo patrón que `general_repairs`), independiente del campo `edge_assets.repair_cost` que se mantiene sin cambios. Botón "Historial" en cada tarjeta de Activos Críticos.
 
 ### v3.0.0 (2026)
 **Evolución SmartOps — SOC Lite + Edge / Data Center Lite**
@@ -231,6 +237,7 @@ ALTER TABLE cbre_jobs       ADD COLUMN IF NOT EXISTS photos TEXT[] DEFAULT '{}':
 | Edge Assets | `edge_assets_schema.sql` | `edge_assets` |
 | Sensores simulados | `edge_sensor_readings_schema.sql` | `edge_sensor_readings` |
 | Vínculo evento↔activo | `edge_security_events_link.sql` | columna `affected_asset_id` en `soc_security_events` |
+| Historial de reparaciones | `edge_asset_repairs_schema.sql` | `edge_asset_repairs` |
 
 Todas siguen el mismo patrón que el resto del proyecto: `CREATE TABLE IF NOT EXISTS`, `CHECK` constraints en vez de enums de Postgres, y RLS `anon_all_*` (acceso completo con la anon key — app interna de equipo, sin roles a nivel de base de datos). No modifican ninguna tabla existente.
 
@@ -384,9 +391,9 @@ Para presentar el proyecto (README, portfolio, LinkedIn), las vistas que mejor l
 | v2.3 | ✅ | Tiempo real en toda la app, sistema toast, confirm global, auto-coste, skeleton loaders |
 | v2.4 | 📋 | Fotos en FOOD/Seguridad/KONE, export PDF en más módulos, búsqueda global |
 | v3.0 | ✅ | SOC Lite (analizadores + eventos), Edge/Data Center Lite (activos, dashboard, sensores, Risk Score), Audit Log |
-| v3.1 | 📋 | Integrar Audit Log en login (correcto/fallido) — pendiente por ser el flujo más sensible de la app |
-| v3.2 | 📋 | Historial de costes de reparación por activo (tabla dedicada, en vez del campo acumulado actual) |
+| v3.1 | ✅ | Audit Log conectado al login (correcto, fallido, primer PIN) |
+| v3.2 | ✅ | Historial de costes de reparación por activo (`edge_asset_repairs`, independiente del campo acumulado) |
 
 ---
 
-*Desarrollado por Manuel Honrado Vega — IKEA Mantenimiento v3.0.0 · 2026*
+*Desarrollado por Manuel Honrado Vega — IKEA Mantenimiento v3.2.0 · 2026*
