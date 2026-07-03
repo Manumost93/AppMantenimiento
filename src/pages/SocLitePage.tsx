@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   ShieldAlert, Link2, Mail, FileWarning, AlertTriangle, FolderSearch,
-  Plus, Inbox, Flame, CheckCircle2,
+  Plus, Inbox, Flame, CheckCircle2, ArrowLeft,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,21 +9,8 @@ import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
-
-type SocCaseType = 'url' | 'email' | 'file' | 'event'
-type SocSeverity = 'low' | 'medium' | 'high' | 'critical'
-type SocStatus = 'open' | 'reviewing' | 'closed' | 'false_positive'
-
-interface SocCase {
-  id: number
-  title: string
-  type: SocCaseType
-  severity: SocSeverity
-  status: SocStatus
-  date: string
-  recommendation: string
-  responsible: string
-}
+import UrlAnalyzer from '@/components/UrlAnalyzer'
+import { SEVERITY_META, STATUS_META, type SocCaseType, type SocCase } from '@/lib/soc'
 
 // Datos de ejemplo — Fase 1 (visual, sin Supabase todavía)
 const MOCK_CASES: SocCase[] = [
@@ -42,20 +29,6 @@ const TYPE_META: Record<SocCaseType, { label: string; icon: typeof Link2 }> = {
   email: { label: 'Correo', icon: Mail },
   file: { label: 'Archivo', icon: FileWarning },
   event: { label: 'Evento', icon: ShieldAlert },
-}
-
-const SEVERITY_META: Record<SocSeverity, { label: string; className: string }> = {
-  low: { label: 'Bajo', className: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300' },
-  medium: { label: 'Medio', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  high: { label: 'Alto', className: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
-  critical: { label: 'Crítico', className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-}
-
-const STATUS_META: Record<SocStatus, { label: string; className: string }> = {
-  open: { label: 'Abierto', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  reviewing: { label: 'En revisión', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  closed: { label: 'Cerrado', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
-  false_positive: { label: 'Falso positivo', className: 'bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-400' },
 }
 
 const TABS: { key: 'all' | SocCaseType; label: string }[] = [
@@ -77,6 +50,7 @@ export default function SocLitePage() {
   const toast = useToast()
   const [activeTab, setActiveTab] = useState<'all' | SocCaseType>('all')
   const [showNewDialog, setShowNewDialog] = useState(false)
+  const [analysisView, setAnalysisView] = useState<'picker' | 'url'>('picker')
 
   const filtered = activeTab === 'all' ? MOCK_CASES : MOCK_CASES.filter(c => c.type === activeTab)
 
@@ -90,9 +64,18 @@ export default function SocLitePage() {
   ]
 
   function handlePickAnalysis(type: SocCaseType) {
+    if (type === 'url') {
+      setAnalysisView('url')
+      return
+    }
     setShowNewDialog(false)
     const label = NEW_ANALYSIS_OPTIONS.find(o => o.type === type)?.label ?? 'Análisis'
-    toast.info(`${label}: disponible en la próxima fase de SOC Lite.`)
+    toast.info(`${label}: disponible en una próxima fase de SOC Lite.`)
+  }
+
+  function closeNewDialog() {
+    setShowNewDialog(false)
+    setAnalysisView('picker')
   }
 
   return (
@@ -204,28 +187,46 @@ export default function SocLitePage() {
         </div>
       </Card>
 
-      {/* Modal: elegir tipo de análisis */}
-      <Dialog open={showNewDialog} onClose={() => setShowNewDialog(false)} title="Nuevo análisis" size="md">
-        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {NEW_ANALYSIS_OPTIONS.map(opt => {
-            const Icon = opt.icon
-            return (
-              <button
-                key={opt.type}
-                onClick={() => handlePickAnalysis(opt.type)}
-                className="flex flex-col items-start gap-2 p-4 rounded-xl border border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors text-left"
-              >
-                <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                  <Icon size={16} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800 dark:text-white">{opt.label}</p>
-                  <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{opt.description}</p>
-                </div>
-              </button>
-            )
-          })}
-        </div>
+      {/* Modal: elegir tipo de análisis, o analizador seleccionado */}
+      <Dialog
+        open={showNewDialog}
+        onClose={closeNewDialog}
+        title={analysisView === 'url' ? 'Analizar URL' : 'Nuevo análisis'}
+        size={analysisView === 'url' ? 'lg' : 'md'}
+      >
+        {analysisView === 'picker' ? (
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {NEW_ANALYSIS_OPTIONS.map(opt => {
+              const Icon = opt.icon
+              return (
+                <button
+                  key={opt.type}
+                  onClick={() => handlePickAnalysis(opt.type)}
+                  className="flex flex-col items-start gap-2 p-4 rounded-xl border border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors text-left"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                    <Icon size={16} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-white">{opt.label}</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{opt.description}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div>
+            <button
+              onClick={() => setAnalysisView('picker')}
+              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 px-5 pt-4"
+            >
+              <ArrowLeft size={13} />
+              Volver
+            </button>
+            <UrlAnalyzer />
+          </div>
+        )}
       </Dialog>
     </div>
   )
