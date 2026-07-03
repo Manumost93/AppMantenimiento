@@ -10,6 +10,7 @@ import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
   SocFileAnalysisRecord, SocSecurityEventRecord, SocStats,
 } from '@/lib/soc'
+import type { SensorReading } from '@/lib/edgeSensors'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -1113,4 +1114,38 @@ export async function deleteEdgeAsset(id: number, name: string): Promise<void> {
     description: `Activo eliminado: ${name}`,
     severity: 'warning',
   })
+}
+
+// ─── Sensores simulados (Fase 9) ────────────────────────────────────────────
+// SQL: database/edge_sensor_readings_schema.sql
+// Todo simulado — sin integración con hardware real.
+
+export async function getEdgeSensorReadings(limit = 500): Promise<SensorReading[]> {
+  const { data, error } = await supabase
+    .from('edge_sensor_readings')
+    .select('*')
+    .order('recorded_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as SensorReading[]
+}
+
+export async function createSensorReading(reading: Omit<SensorReading, 'id' | 'recorded_at'>): Promise<SensorReading> {
+  const { data, error } = await supabase
+    .from('edge_sensor_readings')
+    .insert(reading)
+    .select()
+    .single()
+  if (error) throw error
+  if (data.status !== 'normal') {
+    createAuditLog({
+      action: 'sensor_reading_alert',
+      module: 'edge_sensors',
+      entity_type: 'edge_sensor_reading',
+      entity_id: data.id,
+      description: `Lectura simulada en estado ${data.status}: ${reading.sensor_type} (activo #${reading.asset_id})`,
+      severity: data.status === 'critical' ? 'critical' : 'warning',
+    })
+  }
+  return data as SensorReading
 }

@@ -32,6 +32,7 @@ const SocLitePage   = lazy(() => import('@/pages/SocLitePage'))
 const AuditLogPage  = lazy(() => import('@/pages/AuditLogPage'))
 const EdgeAssetsPage = lazy(() => import('@/pages/EdgeAssetsPage'))
 const EdgeOpsDashboardPage = lazy(() => import('@/pages/EdgeOpsDashboardPage'))
+const EdgeMonitoringPage = lazy(() => import('@/pages/EdgeMonitoringPage'))
 
 function PageFallback() {
   return (
@@ -85,6 +86,7 @@ function AppRoutes() {
             <Route path="/audit-log"  element={<AuditLogPage />} />
             <Route path="/edge-assets" element={<EdgeAssetsPage />} />
             <Route path="/edge-ops" element={<EdgeOpsDashboardPage />} />
+            <Route path="/edge-monitoring" element={<EdgeMonitoringPage />} />
             <Route path="/settings"   element={<SettingsPage />} />
             <Route path="*"           element={<Navigate to="/calendar" replace />} />
           </Routes>
