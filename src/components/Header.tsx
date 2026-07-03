@@ -27,6 +27,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/rondas':    'Rondas de apertura y cierre',
   '/soc-lite':  'SOC Lite · Análisis defensivo',
   '/audit-log': 'Audit Log · Trazabilidad',
+  '/edge-assets': 'Edge / Data Center Lite · Activos críticos',
 }
 
 const PAGE_ICONS: Record<string, string> = {
@@ -48,6 +49,7 @@ const PAGE_ICONS: Record<string, string> = {
   '/rondas':    '📋',
   '/soc-lite':  '🛰️',
   '/audit-log': '🕵️',
+  '/edge-assets': '🖥️',
 }
 
 function getTodayString() {

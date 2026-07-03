@@ -4,7 +4,7 @@ import type {
   CominIonJob, FoodIncident, GeneralRepair,
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
-  AuditLog,
+  AuditLog, EdgeAsset,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -1065,4 +1065,52 @@ export async function getSocStats(): Promise<SocStats> {
     filesReviewed: cases.filter(c => c.case_type === 'file').length,
     securityEvents: cases.filter(c => c.case_type === 'event').length,
   }
+}
+
+// ─── Edge / Data Center Lite (Fase 7) ──────────────────────────────────────
+// SQL: database/edge_assets_schema.sql
+
+const EDGE_ASSET_SELECT = '*, provider:providers(id,name,phone)'
+
+export async function getEdgeAssets(): Promise<EdgeAsset[]> {
+  const { data, error } = await supabase
+    .from('edge_assets')
+    .select(EDGE_ASSET_SELECT)
+    .order('name')
+  if (error) throw error
+  return (data ?? []).map(a => ({ ...a, provider: a.provider ?? undefined })) as EdgeAsset[]
+}
+
+export async function upsertEdgeAsset(asset: Partial<EdgeAsset>): Promise<EdgeAsset> {
+  const { provider, created_at, ...payload } = asset as EdgeAsset & { provider?: unknown; created_at?: unknown }
+  const isNew = !asset.id
+  const { data, error } = await supabase
+    .from('edge_assets')
+    .upsert({ ...payload, updated_at: new Date().toISOString() })
+    .select(EDGE_ASSET_SELECT)
+    .single()
+  if (error) throw error
+  const result = { ...data, provider: data.provider ?? undefined } as EdgeAsset
+  createAuditLog({
+    action: isNew ? 'edge_asset_created' : 'edge_asset_updated',
+    module: 'edge_assets',
+    entity_type: 'edge_asset',
+    entity_id: result.id,
+    description: `Activo ${isNew ? 'creado' : 'actualizado'}: ${result.name}`,
+    severity: result.criticality === 'critical' ? 'warning' : 'info',
+  })
+  return result
+}
+
+export async function deleteEdgeAsset(id: number, name: string): Promise<void> {
+  const { error } = await supabase.from('edge_assets').delete().eq('id', id)
+  if (error) throw error
+  createAuditLog({
+    action: 'edge_asset_deleted',
+    module: 'edge_assets',
+    entity_type: 'edge_asset',
+    entity_id: id,
+    description: `Activo eliminado: ${name}`,
+    severity: 'warning',
+  })
 }

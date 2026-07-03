@@ -3,7 +3,7 @@ import {
   Calendar, LayoutDashboard, User, Users, Truck, FolderOpen,
   Building2, Paintbrush2, UtensilsCrossed, Wrench,
   BarChart2, Settings, ChevronRight, Shield, ClipboardCheck, ShieldAlert, BookOpen, Trash2,
-  HardHat, Thermometer, Radar, History
+  HardHat, Thermometer, Radar, History, Server
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -20,6 +20,7 @@ const navItems = [
   { path: '/food',      icon: UtensilsCrossed,    label: 'FOOD / Restaurante', section: 'areas',  adminOnly: false },
   { path: '/cbre',      icon: HardHat,            label: 'CBRE',               section: 'areas',  adminOnly: false },
   { path: '/bms',       icon: Thermometer,        label: 'BMS / IndoorClima',  section: 'areas',  adminOnly: false },
+  { path: '/edge-assets', icon: Server,           label: 'Activos Críticos',   section: 'critical', adminOnly: false },
   { path: '/meetings',  icon: BookOpen,           label: 'Reuniones',          section: 'work',   adminOnly: false },
   { path: '/waste',     icon: Trash2,             label: 'Residuos',           section: 'work',   adminOnly: false },
   { path: '/team',      icon: Users,              label: 'Equipo',             section: 'manage', adminOnly: false },
@@ -32,11 +33,12 @@ const navItems = [
 ]
 
 const sections = [
-  { key: 'main',   label: 'PRINCIPAL' },
-  { key: 'work',   label: 'TRABAJO' },
-  { key: 'areas',  label: 'ÁREAS' },
-  { key: 'manage', label: 'GESTIÓN' },
-  { key: 'config', label: 'SISTEMA' },
+  { key: 'main',     label: 'PRINCIPAL' },
+  { key: 'work',     label: 'TRABAJO' },
+  { key: 'areas',    label: 'ÁREAS' },
+  { key: 'critical', label: 'OPERACIONES CRÍTICAS' },
+  { key: 'manage',   label: 'GESTIÓN' },
+  { key: 'config',   label: 'SISTEMA' },
 ]
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {

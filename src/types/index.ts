@@ -430,3 +430,34 @@ export interface AuditLog {
   metadata?: Record<string, unknown>
   created_at: string
 }
+
+// ─── Edge / Data Center Lite ─────────────────────────────────────────────────
+
+export type EdgeAssetType =
+  | 'rack' | 'edge_server' | 'switch' | 'firewall' | 'router' | 'ups' | 'pdu' | 'hvac'
+  | 'temperature_sensor' | 'humidity_sensor' | 'cctv' | 'access_control'
+  | 'electrical_panel' | 'generator' | 'bms_controller' | 'pci_panel' | 'network_cabinet'
+
+export type EdgeAssetCriticality = 'low' | 'medium' | 'high' | 'critical'
+export type EdgeAssetStatus = 'operational' | 'warning' | 'offline' | 'maintenance'
+
+export interface EdgeAsset {
+  id: number
+  name: string
+  asset_type: EdgeAssetType
+  location?: string
+  rack?: string
+  rack_unit?: string
+  criticality: EdgeAssetCriticality
+  status: EdgeAssetStatus
+  provider_id?: number
+  provider?: Provider
+  ip_address?: string
+  serial_number?: string
+  last_check_date?: string
+  next_check_date?: string
+  repair_cost: number
+  notes?: string
+  created_at: string
+  updated_at: string
+}
