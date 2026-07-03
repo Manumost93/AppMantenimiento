@@ -107,25 +107,39 @@ export default function WastePage() {
         </Button>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs — clickables como filtro rápido */}
       {loading ? <SkeletonKpis count={3} /> : (
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: 'Pendientes',  value: pending,   color: 'text-gray-600 dark:text-gray-300',       bg: 'bg-gray-50 dark:bg-slate-700',         icon: Clock },
-            { label: 'Solicitados', value: requested, color: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-50 dark:bg-amber-900/20',     icon: Truck },
-            { label: 'Resueltos',   value: resolved,  color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20', icon: CheckCircle2 },
+            { label: 'Pendientes',  val: 'pending',   value: pending,   color: 'text-gray-600 dark:text-gray-300',       bg: 'bg-gray-50 dark:bg-slate-700',         ring: 'ring-gray-400',   icon: Clock },
+            { label: 'Solicitados', val: 'requested', value: requested, color: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-50 dark:bg-amber-900/20',     ring: 'ring-amber-400',  icon: Truck },
+            { label: 'Resueltos',   val: 'resolved',  value: resolved,  color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20', ring: 'ring-emerald-400', icon: CheckCircle2 },
           ].map(k => {
             const Icon = k.icon
+            const active = filterStatus === k.val
             return (
-              <div key={k.label} className={cn('rounded-xl border border-gray-200 dark:border-slate-700 p-3 flex items-center gap-2.5', k.bg)}>
-                <Icon size={18} className={k.color} />
-                <div>
-                  <p className={cn('text-xl font-bold', k.color)}>{k.value}</p>
-                  <p className="text-[11px] text-gray-500 dark:text-slate-400">{k.label}</p>
+              <button key={k.label} onClick={() => setFilterStatus(prev => prev === k.val ? '' : k.val)} className="text-left focus:outline-none">
+                <div className={cn('rounded-xl border border-gray-200 dark:border-slate-700 p-3 flex items-center gap-2.5 transition-all', k.bg, active && `ring-2 ${k.ring}`)}>
+                  <Icon size={18} className={k.color} />
+                  <div>
+                    <p className={cn('text-xl font-bold', k.color)}>{k.value}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-slate-400">{k.label}</p>
+                  </div>
+                  {active && <span className="ml-auto text-[10px] font-medium text-white bg-gray-500 dark:bg-slate-600 rounded-full px-1.5 py-0.5">✕</span>}
                 </div>
-              </div>
+              </button>
             )
           })}
+        </div>
+      )}
+
+      {/* Breadcrumb de filtro activo */}
+      {filterStatus && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+          <span>Mostrando:</span>
+          <span className="font-semibold text-gray-800 dark:text-white">{STATUS_INFO[filterStatus as WasteRequest['status']].label}</span>
+          <span className="text-gray-400">({filtered.length})</span>
+          <button onClick={() => setFilterStatus('')} className="ml-1 text-blue-500 hover:underline">Ver todos</button>
         </div>
       )}
 
@@ -138,23 +152,6 @@ export default function WastePage() {
           </p>
         </div>
       )}
-
-      {/* Filtros */}
-      <div className="flex gap-2 flex-wrap">
-        {['', 'pending', 'requested', 'resolved'].map(s => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
-            className={cn('px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
-              filterStatus === s
-                ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900'
-                : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-600'
-            )}
-          >
-            {s === '' ? 'Todos' : STATUS_INFO[s as WasteRequest['status']].label}
-          </button>
-        ))}
-      </div>
 
       {/* Lista */}
       {loading ? (

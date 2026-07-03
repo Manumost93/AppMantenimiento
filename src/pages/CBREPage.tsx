@@ -94,8 +94,14 @@ export default function CBREPage() {
   const filtered = jobs.filter(j =>
     (!search || j.title.toLowerCase().includes(search.toLowerCase()) || j.zone?.toLowerCase().includes(search.toLowerCase())) &&
     (!filterType || j.job_type === filterType) &&
-    (!filterStatus || j.status === filterStatus)
+    (!filterStatus || (filterStatus === '_overdue'
+      ? (j.status !== 'done' && j.status !== 'cancelled' && (daysUntil(j.due_date) ?? 999) < 0)
+      : j.status === filterStatus))
   )
+
+  const KPI_FILTER_LABELS: Record<string, string> = {
+    pending: 'Pendientes', inprogress: 'En curso', _overdue: 'Vencidos', done: 'Finalizados',
+  }
 
   function openCreate() {
     setSelected(null)
@@ -193,6 +199,7 @@ export default function CBREPage() {
                       <div className={cn('text-xl font-bold', kpi.color)}>{kpi.value}</div>
                       <div className="text-[11px] text-gray-500 dark:text-slate-400">{kpi.label}</div>
                     </div>
+                    {active && <span className="ml-auto text-[10px] font-medium text-white bg-gray-500 dark:bg-slate-600 rounded-full px-1.5 py-0.5">✕</span>}
                   </div>
                 </CardContent>
               </Card>
@@ -200,6 +207,16 @@ export default function CBREPage() {
           )
         })}
       </div>
+
+      {/* Breadcrumb de filtro activo */}
+      {filterStatus && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+          <span>Mostrando:</span>
+          <span className="font-semibold text-gray-800 dark:text-white">{KPI_FILTER_LABELS[filterStatus] || filterStatus}</span>
+          <span className="text-gray-400">({filtered.length})</span>
+          <button onClick={() => setFilterStatus('')} className="ml-1 text-blue-500 hover:underline">Ver todas</button>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex gap-2 flex-wrap">

@@ -106,6 +106,7 @@ export default function KonePage() {
   const [monthlyChecks, setMonthlyChecks] = useState<KoneMonthlyCheck[]>([])
   const [checksLoading, setChecksLoading] = useState(true)
   const [savingEquip, setSavingEquip] = useState<string | null>(null)
+  const [filterEquipStatus, setFilterEquipStatus] = useState<'ok' | 'averia' | 'pending' | ''>('')
 
   // ── Incidents state ──────────────────────────────────────────────────────
   const toast = useToast()
@@ -174,12 +175,30 @@ export default function KonePage() {
   const averiaCount = monthlyChecks.filter(c => c.status === 'averia').length
   const pendingCount = TOTAL - monthlyChecks.length
 
+  function equipMatchesFilter(equipId: string): boolean {
+    if (!filterEquipStatus) return true
+    const status = getCheck(equipId)?.status
+    if (filterEquipStatus === 'pending') return !status
+    return status === filterEquipStatus
+  }
+
+  const EQUIP_FILTER_LABELS: Record<string, string> = {
+    ok: 'Revisados OK', averia: 'Con avería', pending: 'Sin revisar',
+  }
+
   // Incidents CRUD
   const filtered = incidents.filter(i =>
     (!search || i.elevator.toLowerCase().includes(search.toLowerCase()) || i.description.toLowerCase().includes(search.toLowerCase())) &&
     (!filterStatus || i.status === filterStatus)
   )
   const totalCost = incidents.reduce((s, i) => s + (i.total_cost || 0), 0)
+
+  const incidentStats = {
+    pending: incidents.filter(i => i.status === 'pending').length,
+    inprogress: incidents.filter(i => i.status === 'inprogress').length,
+    blocked: incidents.filter(i => i.status === 'blocked').length,
+    done: incidents.filter(i => i.status === 'done').length,
+  }
 
   function openCreate() {
     setSelected(null)
@@ -270,21 +289,37 @@ export default function KonePage() {
             </button>
           </div>
 
-          {/* KPI bar */}
+          {/* KPI bar — clicable como filtro rápido */}
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{okCount}</p>
-              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Revisados OK</p>
-            </div>
-            <div className={cn('border rounded-xl p-3 text-center', averiaCount > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700')}>
-              <p className={cn('text-2xl font-bold', averiaCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-slate-500')}>{averiaCount}</p>
-              <p className={cn('text-[11px] font-medium', averiaCount > 0 ? 'text-red-700 dark:text-red-400' : 'text-gray-400 dark:text-slate-500')}>Con avería</p>
-            </div>
-            <div className="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-gray-400 dark:text-slate-500">{pendingCount}</p>
-              <p className="text-[11px] text-gray-400 dark:text-slate-500 font-medium">Sin revisar</p>
-            </div>
+            <button onClick={() => setFilterEquipStatus(prev => prev === 'ok' ? '' : 'ok')} className="text-left focus:outline-none">
+              <div className={cn('bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center transition-all', filterEquipStatus === 'ok' && 'ring-2 ring-emerald-400')}>
+                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{okCount}</p>
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Revisados OK</p>
+              </div>
+            </button>
+            <button onClick={() => setFilterEquipStatus(prev => prev === 'averia' ? '' : 'averia')} className="text-left focus:outline-none">
+              <div className={cn('border rounded-xl p-3 text-center transition-all', averiaCount > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700', filterEquipStatus === 'averia' && 'ring-2 ring-red-400')}>
+                <p className={cn('text-2xl font-bold', averiaCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-slate-500')}>{averiaCount}</p>
+                <p className={cn('text-[11px] font-medium', averiaCount > 0 ? 'text-red-700 dark:text-red-400' : 'text-gray-400 dark:text-slate-500')}>Con avería</p>
+              </div>
+            </button>
+            <button onClick={() => setFilterEquipStatus(prev => prev === 'pending' ? '' : 'pending')} className="text-left focus:outline-none">
+              <div className={cn('bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 text-center transition-all', filterEquipStatus === 'pending' && 'ring-2 ring-gray-400')}>
+                <p className="text-2xl font-bold text-gray-400 dark:text-slate-500">{pendingCount}</p>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 font-medium">Sin revisar</p>
+              </div>
+            </button>
           </div>
+
+          {/* Breadcrumb de filtro activo */}
+          {filterEquipStatus && (
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+              <span>Mostrando:</span>
+              <span className="font-semibold text-gray-800 dark:text-white">{EQUIP_FILTER_LABELS[filterEquipStatus]}</span>
+              <span className="text-gray-400">({ALL_EQUIPMENT_IDS.filter(equipMatchesFilter).length})</span>
+              <button onClick={() => setFilterEquipStatus('')} className="ml-1 text-blue-500 hover:underline">Ver todos</button>
+            </div>
+          )}
 
           {/* Instructions */}
           <p className="text-xs text-gray-400 dark:text-slate-500 text-center">
@@ -295,36 +330,43 @@ export default function KonePage() {
           {checksLoading ? (
             <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">Cargando...</div>
           ) : (
-            EQUIPMENT_GROUPS.map(group => (
-              <div key={group.type} className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden shadow-sm">
-                <div className={cn('px-4 py-2 flex items-center justify-between', group.headerCls)}>
-                  <p className="text-sm font-bold text-white">{group.label}</p>
-                  <div className="flex gap-2 text-xs text-white/80">
-                    <span>✓ {group.items.filter(id => getCheck(id)?.status === 'ok').length}</span>
-                    {group.items.some(id => getCheck(id)?.status === 'averia') && (
-                      <span className="text-red-200">⚠ {group.items.filter(id => getCheck(id)?.status === 'averia').length}</span>
-                    )}
+            EQUIPMENT_GROUPS.map(group => {
+              const visibleItems = group.items.filter(equipMatchesFilter)
+              if (visibleItems.length === 0) return null
+              return (
+                <div key={group.type} className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                  <div className={cn('px-4 py-2 flex items-center justify-between', group.headerCls)}>
+                    <p className="text-sm font-bold text-white">{group.label}</p>
+                    <div className="flex gap-2 text-xs text-white/80">
+                      <span>✓ {group.items.filter(id => getCheck(id)?.status === 'ok').length}</span>
+                      {group.items.some(id => getCheck(id)?.status === 'averia') && (
+                        <span className="text-red-200">⚠ {group.items.filter(id => getCheck(id)?.status === 'averia').length}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className={cn(
+                    'p-3 grid gap-2',
+                    visibleItems.length >= 8 ? 'grid-cols-5'
+                    : visibleItems.length === 6 ? 'grid-cols-3 sm:grid-cols-6'
+                    : visibleItems.length >= 4 ? 'grid-cols-4'
+                    : 'grid-cols-3'
+                  )}>
+                    {visibleItems.map(equipId => (
+                      <EquipCard
+                        key={equipId}
+                        equipId={equipId}
+                        check={getCheck(equipId)}
+                        saving={savingEquip === equipId}
+                        onCycle={() => cycleStatus(equipId, group.type)}
+                      />
+                    ))}
                   </div>
                 </div>
-                <div className={cn(
-                  'p-3 grid gap-2',
-                  group.items.length >= 8 ? 'grid-cols-5'
-                  : group.items.length === 6 ? 'grid-cols-3 sm:grid-cols-6'
-                  : group.items.length >= 4 ? 'grid-cols-4'
-                  : 'grid-cols-3'
-                )}>
-                  {group.items.map(equipId => (
-                    <EquipCard
-                      key={equipId}
-                      equipId={equipId}
-                      check={getCheck(equipId)}
-                      saving={savingEquip === equipId}
-                      onCycle={() => cycleStatus(equipId, group.type)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))
+              )
+            })
+          )}
+          {!checksLoading && filterEquipStatus && ALL_EQUIPMENT_IDS.filter(equipMatchesFilter).length === 0 && (
+            <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">Ningún equipo coincide con este filtro.</div>
           )}
         </div>
       )}
@@ -332,6 +374,39 @@ export default function KonePage() {
       {/* ── TAB: INCIDENCIAS ─────────────────────────────────────────────────── */}
       {tab === 'incidencias' && (
         <div className="space-y-4">
+          {/* KPIs — clicables como filtro rápido */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Pendientes', val: 'pending', value: incidentStats.pending, color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-50 dark:bg-slate-700', ring: 'ring-gray-400' },
+              { label: 'En curso', val: 'inprogress', value: incidentStats.inprogress, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', ring: 'ring-blue-400' },
+              { label: 'Bloqueadas', val: 'blocked', value: incidentStats.blocked, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/30', ring: 'ring-amber-400' },
+              { label: 'Finalizadas', val: 'done', value: incidentStats.done, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/30', ring: 'ring-emerald-400' },
+            ].map(kpi => {
+              const active = filterStatus === kpi.val
+              return (
+                <button key={kpi.val} onClick={() => setFilterStatus(prev => prev === kpi.val ? '' : kpi.val)} className="text-left focus:outline-none">
+                  <div className={cn('rounded-xl border border-gray-200 dark:border-slate-700 p-3 flex items-center gap-2.5 transition-all', kpi.bg, active && `ring-2 ${kpi.ring}`)}>
+                    <div>
+                      <div className={cn('text-xl font-bold', kpi.color)}>{kpi.value}</div>
+                      <div className="text-[11px] text-gray-500 dark:text-slate-400">{kpi.label}</div>
+                    </div>
+                    {active && <span className="ml-auto text-[10px] font-medium text-white bg-gray-500 dark:bg-slate-600 rounded-full px-1.5 py-0.5">✕</span>}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Breadcrumb de filtro activo */}
+          {filterStatus && (
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+              <span>Mostrando:</span>
+              <span className="font-semibold text-gray-800 dark:text-white">{STATUS_LABELS[filterStatus as keyof typeof STATUS_LABELS] || filterStatus}</span>
+              <span className="text-gray-400">({filtered.length})</span>
+              <button onClick={() => setFilterStatus('')} className="ml-1 text-blue-500 hover:underline">Ver todas</button>
+            </div>
+          )}
+
           {/* Search & filter */}
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">

@@ -33,6 +33,17 @@ export default function FoodPage() {
 
   const totalCost = incidents.reduce((s, i) => s + (i.total_cost || 0), 0)
 
+  const stats = {
+    pending: incidents.filter(i => i.status === 'pending').length,
+    inprogress: incidents.filter(i => i.status === 'inprogress').length,
+    blocked: incidents.filter(i => i.status === 'blocked').length,
+    done: incidents.filter(i => i.status === 'done').length,
+  }
+
+  function toggleKpi(val: string) {
+    setFilterStatus(prev => prev === val ? '' : val)
+  }
+
   function openCreate() {
     setSelected(null)
     setForm({ status: 'pending', priority: 'medium', material_cost: 0, repair_cost: 0, date: todayIso() })
@@ -78,6 +89,39 @@ export default function FoodPage() {
         </div>
         <Button size="sm" onClick={openCreate}><Plus size={14} />Nueva incidencia</Button>
       </div>
+
+      {/* KPIs — clickables como filtro rápido */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {([
+          { label: 'Pendientes', val: 'pending', value: stats.pending, color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-50 dark:bg-slate-700', ring: 'ring-gray-400' },
+          { label: 'En curso', val: 'inprogress', value: stats.inprogress, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', ring: 'ring-blue-400' },
+          { label: 'Bloqueadas', val: 'blocked', value: stats.blocked, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/30', ring: 'ring-amber-400' },
+          { label: 'Finalizadas', val: 'done', value: stats.done, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/30', ring: 'ring-emerald-400' },
+        ] as const).map(kpi => {
+          const active = filterStatus === kpi.val
+          return (
+            <button key={kpi.label} onClick={() => toggleKpi(kpi.val)} className="text-left focus:outline-none">
+              <div className={cn('rounded-xl border border-gray-200 dark:border-slate-700 p-3 flex items-center gap-2.5 transition-all', kpi.bg, active && `ring-2 ${kpi.ring}`)}>
+                <div>
+                  <div className={cn('text-xl font-bold', kpi.color)}>{kpi.value}</div>
+                  <div className="text-[11px] text-gray-500 dark:text-slate-400">{kpi.label}</div>
+                </div>
+                {active && <span className="ml-auto text-[10px] font-medium text-white bg-gray-500 dark:bg-slate-600 rounded-full px-1.5 py-0.5">✕</span>}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Breadcrumb de filtro activo */}
+      {filterStatus && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+          <span>Mostrando:</span>
+          <span className="font-semibold text-gray-800 dark:text-white">{STATUS_LABELS[filterStatus as keyof typeof STATUS_LABELS] || filterStatus}</span>
+          <span className="text-gray-400">({filtered.length})</span>
+          <button onClick={() => setFilterStatus('')} className="ml-1 text-blue-500 hover:underline">Ver todas</button>
+        </div>
+      )}
 
       <div className="flex gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[180px]">

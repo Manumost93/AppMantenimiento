@@ -75,6 +75,7 @@ export default function BmsPage() {
   const [activeTab, setActiveTab] = useState<'equipment' | 'incidents'>('equipment')
   const [filterStatus, setFilterStatus] = useState<BmsEquipmentStatus | ''>('')
   const [filterZone, setFilterZone] = useState('')
+  const [filterIncidentStatus, setFilterIncidentStatus] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [showEquipDialog, setShowEquipDialog] = useState(false)
   const [showIncidentDialog, setShowIncidentDialog] = useState(false)
@@ -99,6 +100,8 @@ export default function BmsPage() {
   )
 
   const openIncidents = incidents.filter(i => i.status !== 'resolved')
+
+  const filteredIncidents = incidents.filter(i => !filterIncidentStatus || i.status === filterIncidentStatus)
 
   // ── Equipo CRUD ──
 
@@ -254,6 +257,16 @@ export default function BmsPage() {
         })}
       </div>
 
+      {/* Breadcrumb de filtro activo (equipos) */}
+      {activeTab === 'equipment' && filterStatus && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+          <span>Mostrando:</span>
+          <span className="font-semibold text-gray-800 dark:text-white">{STATUS_CFG[filterStatus].label}</span>
+          <span className="text-gray-400">({filteredEquip.length})</span>
+          <button onClick={() => setFilterStatus('')} className="ml-1 text-blue-500 hover:underline">Ver todos</button>
+        </div>
+      )}
+
       {/* Tabs + filtro zona */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex bg-gray-100 dark:bg-slate-700 rounded-lg p-0.5 gap-0.5">
@@ -391,16 +404,30 @@ export default function BmsPage() {
       {/* Vista incidencias */}
       {activeTab === 'incidents' && (
         <div className="space-y-2">
-          {/* Filtro estado incidencia */}
+          {/* Filtro estado incidencia — clicable */}
           <div className="flex gap-2 flex-wrap">
-            {(['open', 'in_progress', 'resolved'] as const).map(s => (
-              <button key={s} onClick={() => {}}
-                className={cn('text-xs px-3 py-1.5 rounded-full border font-medium transition-all',
-                  INCIDENT_STATUS_CLASSES[s], 'border-transparent')}>
-                {INCIDENT_STATUS_LABELS[s]}
-              </button>
-            ))}
+            {(['open', 'in_progress', 'resolved'] as const).map(s => {
+              const active = filterIncidentStatus === s
+              return (
+                <button key={s} onClick={() => setFilterIncidentStatus(prev => prev === s ? '' : s)}
+                  className={cn('text-xs px-3 py-1.5 rounded-full border font-medium transition-all',
+                    INCIDENT_STATUS_CLASSES[s],
+                    active ? 'ring-2 ring-offset-1 border-transparent shadow-sm' : 'border-transparent opacity-60 hover:opacity-100')}>
+                  {INCIDENT_STATUS_LABELS[s]}
+                </button>
+              )
+            })}
           </div>
+
+          {/* Breadcrumb de filtro activo (incidencias) */}
+          {filterIncidentStatus && (
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+              <span>Mostrando:</span>
+              <span className="font-semibold text-gray-800 dark:text-white">{INCIDENT_STATUS_LABELS[filterIncidentStatus]}</span>
+              <span className="text-gray-400">({filteredIncidents.length})</span>
+              <button onClick={() => setFilterIncidentStatus('')} className="ml-1 text-blue-500 hover:underline">Ver todas</button>
+            </div>
+          )}
 
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden shadow-sm overflow-x-auto">
             <table className="w-full text-sm min-w-[560px]">
@@ -412,7 +439,7 @@ export default function BmsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                {incidents.map(inc => (
+                {filteredIncidents.map(inc => (
                   <tr key={inc.id} className={cn('hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors', inc.status === 'resolved' && 'opacity-60')}>
                     <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap">{formatDateShort(inc.created_at?.split('T')[0])}</td>
                     <td className="px-4 py-2.5 text-xs text-gray-700 dark:text-slate-300 whitespace-nowrap">{inc.equipment?.name || '—'}</td>
@@ -451,7 +478,7 @@ export default function BmsPage() {
                 ))}
               </tbody>
             </table>
-            {incidents.length === 0 && <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">No hay incidencias</div>}
+            {filteredIncidents.length === 0 && <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">No hay incidencias</div>}
           </div>
         </div>
       )}

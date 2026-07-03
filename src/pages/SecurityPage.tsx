@@ -53,7 +53,7 @@ export default function SecurityPage() {
 
   const filtered = incidents.filter(i =>
     (!search || i.description.toLowerCase().includes(search.toLowerCase()) || i.zone.toLowerCase().includes(search.toLowerCase()) || i.external_company?.toLowerCase().includes(search.toLowerCase())) &&
-    (!filterStatus || i.status === filterStatus) &&
+    (!filterStatus || (filterStatus === '_urgent' ? (i.priority === 'urgent' && i.status !== 'done') : i.status === filterStatus)) &&
     (!filterType || i.incident_type === filterType)
   )
 
@@ -62,6 +62,14 @@ export default function SecurityPage() {
     inprogress: incidents.filter(i => i.status === 'inprogress').length,
     urgent: incidents.filter(i => i.priority === 'urgent' && i.status !== 'done').length,
     done: incidents.filter(i => i.status === 'done').length,
+  }
+
+  function toggleKpi(val: string) {
+    setFilterStatus(prev => prev === val ? '' : val)
+  }
+
+  const KPI_FILTER_LABELS: Record<string, string> = {
+    pending: 'Pendientes', inprogress: 'En curso', _urgent: 'Urgentes', done: 'Resueltas',
   }
 
   function openCreate() {
@@ -131,26 +139,40 @@ export default function SecurityPage() {
         </Button>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs — clickables como filtro rápido */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Pendientes', value: stats.pending, color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-50 dark:bg-slate-700', icon: Clock },
-          { label: 'En curso', value: stats.inprogress, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', icon: AlertTriangle },
-          { label: 'Urgentes', value: stats.urgent, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/30', icon: AlertTriangle },
-          { label: 'Resueltas', value: stats.done, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/30', icon: CheckCircle2 },
+          { label: 'Pendientes', val: 'pending', value: stats.pending, color: 'text-gray-600 dark:text-gray-300', bg: 'bg-gray-50 dark:bg-slate-700', ring: 'ring-gray-400', icon: Clock },
+          { label: 'En curso', val: 'inprogress', value: stats.inprogress, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', ring: 'ring-blue-400', icon: AlertTriangle },
+          { label: 'Urgentes', val: '_urgent', value: stats.urgent, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/30', ring: 'ring-red-400', icon: AlertTriangle },
+          { label: 'Resueltas', val: 'done', value: stats.done, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/30', ring: 'ring-emerald-400', icon: CheckCircle2 },
         ].map(kpi => {
           const Icon = kpi.icon
+          const active = filterStatus === kpi.val
           return (
-            <div key={kpi.label} className={cn('rounded-xl border border-gray-200 dark:border-slate-700 p-3 flex items-center gap-3', kpi.bg)}>
-              <Icon size={20} className={kpi.color} />
-              <div>
-                <p className={cn('text-xl font-bold', kpi.color)}>{kpi.value}</p>
-                <p className="text-[11px] text-gray-500 dark:text-slate-400">{kpi.label}</p>
+            <button key={kpi.label} onClick={() => toggleKpi(kpi.val)} className="text-left focus:outline-none">
+              <div className={cn('rounded-xl border border-gray-200 dark:border-slate-700 p-3 flex items-center gap-3 transition-all', kpi.bg, active && `ring-2 ${kpi.ring}`)}>
+                <Icon size={20} className={kpi.color} />
+                <div>
+                  <p className={cn('text-xl font-bold', kpi.color)}>{kpi.value}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">{kpi.label}</p>
+                </div>
+                {active && <span className="ml-auto text-[10px] font-medium text-white bg-gray-500 dark:bg-slate-600 rounded-full px-1.5 py-0.5">✕</span>}
               </div>
-            </div>
+            </button>
           )
         })}
       </div>
+
+      {/* Breadcrumb de filtro activo */}
+      {filterStatus && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+          <span>Mostrando:</span>
+          <span className="font-semibold text-gray-800 dark:text-white">{KPI_FILTER_LABELS[filterStatus] || filterStatus}</span>
+          <span className="text-gray-400">({filtered.length})</span>
+          <button onClick={() => setFilterStatus('')} className="ml-1 text-blue-500 hover:underline">Ver todas</button>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-2">
