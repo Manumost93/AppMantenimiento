@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
-import { getAreas, upsertArea, deleteArea, getWorkers, setWorkerPin, resetAllWorkerPins } from '@/lib/supabase'
+import { getAreas, upsertArea, deleteArea, getWorkers, setWorkerPin, resetAllWorkerPins, setCriticalRegistryPassphrase } from '@/lib/supabase'
 import type { Area, TeamMember } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -15,7 +15,7 @@ type Tab = 'sections' | 'pin' | 'security' | 'about'
 export default function SettingsPage() {
   const toast = useToast()
   const confirm = useConfirm()
-  const { worker, isAdmin } = useAuth()
+  const { worker, isAdmin, canViewAssetRegistry } = useAuth()
 
   if (!isAdmin) {
     return (
@@ -46,6 +46,12 @@ export default function SettingsPage() {
   // ── Seguridad ───────────────────────────────────────────────────────────────
   const [resettingPins, setResettingPins] = useState(false)
   const [resetMsg, setResetMsg] = useState('')
+
+  // ── Contraseña de Activos Críticos (solo administrador con acceso a esa sección) ──
+  const [registryPass1, setRegistryPass1] = useState('')
+  const [registryPass2, setRegistryPass2] = useState('')
+  const [savingRegistryPass, setSavingRegistryPass] = useState(false)
+  const [registryPassMsg, setRegistryPassMsg] = useState('')
 
   useEffect(() => {
     Promise.all([getAreas(), getWorkers()])
@@ -322,6 +328,65 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Contraseña del Registro de Activos — visible solo para el administrador con acceso a esa sección */}
+          {isAdmin && canViewAssetRegistry && (
+            <Card>
+              <CardContent className="pt-4 pb-4 space-y-3">
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                  <Lock size={15} className="text-purple-500" />
+                  Contraseña del Registro de Activos
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  Restablece la contraseña adicional de la sección "Registro de Activos". Solo tú puedes ver y usar esta opción.
+                </p>
+                <input
+                  type="password"
+                  placeholder="Nueva contraseña (mín. 6 caracteres)"
+                  className="w-full text-sm border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-800 dark:text-slate-200"
+                  value={registryPass1}
+                  onChange={e => setRegistryPass1(e.target.value)}
+                />
+                <input
+                  type="password"
+                  placeholder="Repite la contraseña"
+                  className="w-full text-sm border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-800 dark:text-slate-200"
+                  value={registryPass2}
+                  onChange={e => setRegistryPass2(e.target.value)}
+                />
+                {registryPassMsg && (
+                  <p className={cn('text-sm', registryPassMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500')}>
+                    {registryPassMsg}
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  className="border-purple-200 text-purple-600 hover:bg-purple-50 w-full"
+                  disabled={savingRegistryPass || !registryPass1.trim()}
+                  onClick={async () => {
+                    setRegistryPassMsg('')
+                    if (registryPass1.length < 6) { setRegistryPassMsg('Usa al menos 6 caracteres.'); return }
+                    if (registryPass1 !== registryPass2) { setRegistryPassMsg('Las dos contraseñas no coinciden.'); return }
+                    const ok = await confirm({ title: 'Restablecer contraseña', message: 'Se cambiará la contraseña de acceso al Registro de Activos. Quien la tenga guardada tendrá que usar la nueva.', confirmLabel: 'Sí, restablecer', danger: false })
+                    if (!ok) return
+                    setSavingRegistryPass(true)
+                    try {
+                      await setCriticalRegistryPassphrase(registryPass1)
+                      setRegistryPassMsg('✓ Contraseña actualizada.')
+                      setRegistryPass1(''); setRegistryPass2('')
+                    } catch {
+                      setRegistryPassMsg('Error al guardar la contraseña.')
+                    } finally {
+                      setSavingRegistryPass(false)
+                    }
+                  }}
+                >
+                  <Lock size={14} />
+                  {savingRegistryPass ? 'Guardando...' : 'Restablecer contraseña'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
