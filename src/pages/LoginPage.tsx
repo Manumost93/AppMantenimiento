@@ -152,7 +152,7 @@ export default function LoginPage() {
         </div>
         <div className="flex items-center gap-3 mb-1">
           <div className="h-px w-7" style={{ background: 'linear-gradient(90deg, transparent, #3b82f6)' }} />
-          <h1 className="text-white font-black text-2xl tracking-[0.18em]">IKEA</h1>
+          <h1 className="text-white font-black text-2xl tracking-[0.18em]">APP</h1>
           <div className="h-px w-7" style={{ background: 'linear-gradient(90deg, #3b82f6, transparent)' }} />
         </div>
         <p className="text-blue-400 text-[10px] font-semibold tracking-[0.35em] uppercase">Mantenimiento</p>

@@ -55,10 +55,10 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       <div className="px-4 py-4 border-b border-slate-700">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0">
-            IK
+            AP
           </div>
           <div className="min-w-0">
-            <div className="font-bold text-sm leading-tight text-white">IKEA</div>
+            <div className="font-bold text-sm leading-tight text-white">APP</div>
             <div className="text-xs text-slate-400 leading-tight">Mantenimiento</div>
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           </div>
         )}
         <div className="text-[10px] text-slate-500 leading-relaxed">
-          <div className="text-slate-400 font-medium text-[11px]">IKEA Mantenimiento</div>
+          <div className="text-slate-400 font-medium text-[11px]">APP Mantenimiento</div>
           <div>Desarrollado por</div>
           <div className="text-slate-300 font-medium">Manuel Honrado Vega</div>
           <div className="text-slate-600 mt-0.5">v3.3.0 · 2026</div>
