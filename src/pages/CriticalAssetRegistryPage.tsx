@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Boxes, Search, Lock, ShieldOff, FileDown, FileSpreadsheet,
   Wrench, AlertTriangle, Euro, Layers, CalendarClock, Clock,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -43,6 +44,20 @@ function isEndOfLifeSoon(dateStr?: string): boolean {
   const d = daysUntil(dateStr)
   return d !== null && d <= END_OF_LIFE_HORIZON_DAYS
 }
+
+// ─── Orden por columna ─────────────────────────────────────────────────────────
+
+type SortColumn = 'description' | 'classification_name' | 'location_description' | 'criticality' | 'replacement_cost' | 'repairs' | 'end_date' | null
+
+const SORTABLE_COLUMNS: { key: SortColumn; label: string }[] = [
+  { key: 'description', label: 'Descripción' },
+  { key: 'classification_name', label: 'Categoría' },
+  { key: 'location_description', label: 'Ubicación' },
+  { key: 'criticality', label: 'Crit.' },
+  { key: 'replacement_cost', label: 'Coste reposición' },
+  { key: 'repairs', label: 'Coste reparaciones' },
+  { key: 'end_date', label: 'Fin vida útil' },
+]
 
 function endOfLifeBadge(days: number | null) {
   if (days === null || days > END_OF_LIFE_HORIZON_DAYS) return null
@@ -187,6 +202,8 @@ function RegistryContent({ workerId }: { workerId?: number }) {
   const [filterCriticality, setFilterCriticality] = useState('')
   const [filterLocation, setFilterLocation] = useState('')
   const [kpiFilter, setKpiFilter] = useState('')
+  const [sortColumn, setSortColumn] = useState<SortColumn>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const [selected, setSelected] = useState<CriticalAsset | null>(null)
   const [form, setForm] = useState<Partial<CriticalAsset>>({})
@@ -239,6 +256,35 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     ))
   )
 
+  function sortValue(a: CriticalAsset, col: SortColumn): string | number {
+    switch (col) {
+      case 'description': return a.description.toLowerCase()
+      case 'classification_name': return a.classification_name?.toLowerCase() ?? ''
+      case 'location_description': return a.location_description?.toLowerCase() ?? ''
+      case 'criticality': return a.criticality ?? 999
+      case 'replacement_cost': return a.replacement_cost
+      case 'repairs': return repairTotals.get(a.id) ?? 0
+      case 'end_date': return a.end_date ?? '9999-99-99'
+      default: return ''
+    }
+  }
+
+  const sorted = sortColumn ? [...filtered].sort((a, b) => {
+    const va = sortValue(a, sortColumn)
+    const vb = sortValue(b, sortColumn)
+    const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+    return sortDir === 'asc' ? cmp : -cmp
+  }) : filtered
+
+  function handleSort(col: SortColumn) {
+    if (sortColumn === col) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(col)
+      setSortDir('asc')
+    }
+  }
+
   function openDetail(asset: CriticalAsset) {
     setSelected(asset)
     setForm({ ...asset })
@@ -287,7 +333,7 @@ function RegistryContent({ workerId }: { workerId?: number }) {
 
   function exportCsv() {
     const header = ['Código', 'Descripción', 'Categoría', 'Ubicación', 'Criticidad', 'Coste reposición', 'Coste reparaciones', 'Fin vida útil', 'Estado', 'Fabricante', 'Modelo']
-    const rows = filtered.map(a => [
+    const rows = sorted.map(a => [
       a.asset_code, a.description, a.classification_name ?? '', a.location_description ?? '',
       String(a.criticality ?? ''), String(a.replacement_cost), String(repairTotals.get(a.id) ?? 0),
       a.end_date ?? '', a.status ?? '', a.manufacturer ?? '', a.model ?? '',
@@ -305,11 +351,11 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     doc.setFontSize(13)
     doc.text('Registro de Activos Críticos', 10, 12)
     doc.setFontSize(8)
-    doc.text(`${filtered.length} activos · generado ${todayIso()}`, 10, 17)
+    doc.text(`${sorted.length} activos · generado ${todayIso()}`, 10, 17)
     autoTable(doc, {
       startY: 22,
       head: [['Código', 'Descripción', 'Categoría', 'Ubicación', 'Crit.', 'Coste reposición', 'Coste reparaciones', 'Fin vida útil']],
-      body: filtered.map(a => [
+      body: sorted.map(a => [
         a.asset_code, a.description, a.classification_name ?? '—', a.location_description ?? '—',
         a.criticality != null ? String(a.criticality) : '—',
         formatCurrency(a.replacement_cost), formatCurrency(repairTotals.get(a.id) ?? 0), formatDate(a.end_date),
@@ -417,13 +463,26 @@ function RegistryContent({ workerId }: { workerId?: number }) {
         <table className="w-full text-sm min-w-[900px]">
           <thead className="bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
             <tr>
-              {['Código', 'Descripción', 'Categoría', 'Ubicación', 'Crit.', 'Coste reposición', 'Coste reparaciones', 'Fin vida útil'].map(h => (
-                <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase">{h}</th>
+              <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase">Código</th>
+              {SORTABLE_COLUMNS.map(col => (
+                <th key={col.label} className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase">
+                  <button
+                    onClick={() => handleSort(col.key)}
+                    className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-white transition-colors focus:outline-none"
+                  >
+                    {col.label}
+                    {sortColumn === col.key ? (
+                      sortDir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />
+                    ) : (
+                      <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                    )}
+                  </button>
+                </th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-            {filtered.map(a => (
+            {sorted.map(a => (
               <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer" onClick={() => openDetail(a)}>
                 <td className="px-3 py-2.5 text-xs font-mono whitespace-nowrap dark:text-slate-200">{a.asset_code}</td>
                 <td className="px-3 py-2.5 text-xs max-w-[260px] truncate dark:text-slate-200">{a.description}</td>
@@ -456,7 +515,7 @@ function RegistryContent({ workerId }: { workerId?: number }) {
             ))}
           </tbody>
         </table>
-        {filtered.length === 0 && <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">Sin resultados para estos filtros.</div>}
+        {sorted.length === 0 && <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">Sin resultados para estos filtros.</div>}
       </div>
 
       {/* Dialog de detalle */}
