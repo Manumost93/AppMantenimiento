@@ -331,7 +331,7 @@ export default function CominIonPage() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filtered.map(job => (
-              <tr key={job.id} className={cn('hover:bg-gray-50', selectMode && selectedIds.has(job.id) && 'bg-blue-50')}>
+              <tr key={job.id} className={cn('hover:bg-gray-50 dark:hover:bg-slate-700', selectMode && selectedIds.has(job.id) && 'bg-blue-50 dark:bg-blue-900/40')}>
                 {selectMode && (
                   <td className="px-3 py-2.5">
                     <input
