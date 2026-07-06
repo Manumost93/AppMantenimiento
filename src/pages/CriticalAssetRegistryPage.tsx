@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Boxes, Search, Lock, ShieldOff, FileDown, FileSpreadsheet,
-  Wrench, AlertTriangle, Euro, Layers,
+  Wrench, AlertTriangle, Euro, Layers, CalendarClock, Clock,
 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -27,6 +27,29 @@ const labelClass = 'block text-xs font-medium text-gray-700 dark:text-slate-300 
 function formatDate(d?: string) {
   if (!d) return '—'
   return new Date(d + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+// ─── Vida útil próxima a acabar (umbral: 2 años) ──────────────────────────────
+
+const END_OF_LIFE_HORIZON_DAYS = 730
+
+function daysUntil(dateStr?: string): number | null {
+  if (!dateStr) return null
+  const diff = new Date(dateStr).getTime() - new Date().setHours(0, 0, 0, 0)
+  return Math.ceil(diff / 86400000)
+}
+
+function isEndOfLifeSoon(dateStr?: string): boolean {
+  const d = daysUntil(dateStr)
+  return d !== null && d <= END_OF_LIFE_HORIZON_DAYS
+}
+
+function endOfLifeBadge(days: number | null) {
+  if (days === null || days > END_OF_LIFE_HORIZON_DAYS) return null
+  if (days < 0) return { label: `Vencido hace ${Math.abs(days)}d`, cls: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 font-bold' }
+  if (days <= 180) return { label: `${days}d`, cls: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 font-bold' }
+  if (days <= 365) return { label: `${days}d`, cls: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' }
+  return { label: `${days}d`, cls: 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' }
 }
 
 // ─── Gate de acceso: permiso + contraseña adicional ───────────────────────────
@@ -193,6 +216,7 @@ function RegistryContent({ workerId }: { workerId?: number }) {
   const totalReplacement = assets.reduce((s, a) => s + Number(a.replacement_cost || 0), 0)
   const totalRepairs = [...repairTotals.values()].reduce((s, v) => s + v, 0)
   const criticalCount = assets.filter(a => a.criticality === 1).length
+  const endOfLifeCount = assets.filter(a => isEndOfLifeSoon(a.end_date)).length
 
   function toggleKpi(val: string) {
     setKpiFilter(prev => prev === val ? '' : val)
@@ -208,7 +232,11 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     (!filterClass || a.classification_name === filterClass) &&
     (!filterCriticality || String(a.criticality) === filterCriticality) &&
     (!filterLocation || a.location_description === filterLocation) &&
-    (!kpiFilter || (kpiFilter === '_critical' ? a.criticality === 1 : true))
+    (!kpiFilter || (
+      kpiFilter === '_critical' ? a.criticality === 1 :
+      kpiFilter === '_eol' ? isEndOfLifeSoon(a.end_date) :
+      true
+    ))
   )
 
   function openDetail(asset: CriticalAsset) {
@@ -258,11 +286,11 @@ function RegistryContent({ workerId }: { workerId?: number }) {
   }
 
   function exportCsv() {
-    const header = ['Código', 'Descripción', 'Categoría', 'Ubicación', 'Criticidad', 'Coste reposición', 'Coste reparaciones', 'Estado', 'Fabricante', 'Modelo']
+    const header = ['Código', 'Descripción', 'Categoría', 'Ubicación', 'Criticidad', 'Coste reposición', 'Coste reparaciones', 'Fin vida útil', 'Estado', 'Fabricante', 'Modelo']
     const rows = filtered.map(a => [
       a.asset_code, a.description, a.classification_name ?? '', a.location_description ?? '',
       String(a.criticality ?? ''), String(a.replacement_cost), String(repairTotals.get(a.id) ?? 0),
-      a.status ?? '', a.manufacturer ?? '', a.model ?? '',
+      a.end_date ?? '', a.status ?? '', a.manufacturer ?? '', a.model ?? '',
     ])
     const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
@@ -280,11 +308,11 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     doc.text(`${filtered.length} activos · generado ${todayIso()}`, 10, 17)
     autoTable(doc, {
       startY: 22,
-      head: [['Código', 'Descripción', 'Categoría', 'Ubicación', 'Crit.', 'Coste reposición', 'Coste reparaciones', 'Estado']],
+      head: [['Código', 'Descripción', 'Categoría', 'Ubicación', 'Crit.', 'Coste reposición', 'Coste reparaciones', 'Fin vida útil']],
       body: filtered.map(a => [
         a.asset_code, a.description, a.classification_name ?? '—', a.location_description ?? '—',
         a.criticality != null ? String(a.criticality) : '—',
-        formatCurrency(a.replacement_cost), formatCurrency(repairTotals.get(a.id) ?? 0), a.status ?? '—',
+        formatCurrency(a.replacement_cost), formatCurrency(repairTotals.get(a.id) ?? 0), formatDate(a.end_date),
       ]),
       styles: { fontSize: 7, cellPadding: 1.5 },
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255] },
@@ -292,7 +320,7 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     doc.save(`registro-activos-${todayIso()}.pdf`)
   }
 
-  if (loading) return <PageLoading kpis={4} rows={6} />
+  if (loading) return <PageLoading kpis={5} rows={6} />
 
   const selectedRepairTotal = selected ? (repairTotals.get(selected.id) ?? 0) : 0
   const repairRatio = selected && selected.replacement_cost > 0 ? selectedRepairTotal / selected.replacement_cost : null
@@ -316,10 +344,11 @@ function RegistryContent({ workerId }: { workerId?: number }) {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           { label: 'Activos totales', value: assets.length, val: '', icon: Layers, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', ring: 'ring-blue-400' },
           { label: 'Críticos (nivel 1)', value: criticalCount, val: '_critical', icon: AlertTriangle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/30', ring: 'ring-red-400' },
+          { label: 'Vida útil próxima (2 años)', value: endOfLifeCount, val: '_eol', icon: CalendarClock, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/30', ring: 'ring-orange-400' },
           { label: 'Coste de reposición', value: formatCurrency(totalReplacement), val: '', icon: Euro, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/30', ring: 'ring-emerald-400' },
           { label: 'Coste reparaciones', value: formatCurrency(totalRepairs), val: '', icon: Wrench, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/30', ring: 'ring-amber-400' },
         ].map(kpi => {
@@ -348,7 +377,9 @@ function RegistryContent({ workerId }: { workerId?: number }) {
       {kpiFilter && (
         <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
           <span>Mostrando:</span>
-          <span className="font-semibold text-gray-800 dark:text-white">Críticos (nivel 1)</span>
+          <span className="font-semibold text-gray-800 dark:text-white">
+            {kpiFilter === '_critical' ? 'Críticos (nivel 1)' : kpiFilter === '_eol' ? 'Vida útil próxima (2 años)' : ''}
+          </span>
           <span className="text-gray-400">({filtered.length})</span>
           <button onClick={() => setKpiFilter('')} className="ml-1 text-blue-500 hover:underline">Ver todos</button>
         </div>
@@ -386,7 +417,7 @@ function RegistryContent({ workerId }: { workerId?: number }) {
         <table className="w-full text-sm min-w-[900px]">
           <thead className="bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
             <tr>
-              {['Código', 'Descripción', 'Categoría', 'Ubicación', 'Crit.', 'Coste reposición', 'Coste reparaciones', 'Estado'].map(h => (
+              {['Código', 'Descripción', 'Categoría', 'Ubicación', 'Crit.', 'Coste reposición', 'Coste reparaciones', 'Fin vida útil'].map(h => (
                 <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase">{h}</th>
               ))}
             </tr>
@@ -408,7 +439,19 @@ function RegistryContent({ workerId }: { workerId?: number }) {
                 </td>
                 <td className="px-3 py-2.5 text-xs font-medium whitespace-nowrap dark:text-slate-200">{formatCurrency(a.replacement_cost)}</td>
                 <td className="px-3 py-2.5 text-xs whitespace-nowrap dark:text-slate-300">{formatCurrency(repairTotals.get(a.id) ?? 0)}</td>
-                <td className="px-3 py-2.5 text-xs dark:text-slate-300">{a.status ?? '—'}</td>
+                <td className="px-3 py-2.5 text-xs whitespace-nowrap">
+                  {(() => {
+                    const days = daysUntil(a.end_date)
+                    const badge = endOfLifeBadge(days)
+                    return badge ? (
+                      <span className={cn('flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] w-fit', badge.cls)}>
+                        <Clock size={10} /> {badge.label}
+                      </span>
+                    ) : a.end_date ? (
+                      <span className="text-xs text-gray-400 dark:text-slate-500">{formatDate(a.end_date)}</span>
+                    ) : '—'
+                  })()}
+                </td>
               </tr>
             ))}
           </tbody>

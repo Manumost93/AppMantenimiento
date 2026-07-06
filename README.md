@@ -14,7 +14,7 @@ No es una demo ni un proyecto de prueba: es la aplicación real que usa el equip
 |---|---|
 | **Aplicación** | IKEA Mantenimiento |
 | **Desarrollado por** | **Manuel Honrado Vega** |
-| **Versión** | 3.3.0 |
+| **Versión** | 3.4.0 |
 | **Año** | 2026 |
 | **Uso** | Interno · Equipo de Mantenimiento IKEA Alcorcón |
 
@@ -93,6 +93,14 @@ No es una demo ni un proyecto de prueba: es la aplicación real que usa el equip
 ---
 
 ## Historial de versiones
+
+### v3.4.0 (2026)
+**Registro de Activos Críticos real, con acceso restringido**
+
+- Nuevo módulo independiente de Edge/Data Center Lite: inventario real de activos de la tienda (importado desde el sistema CAFM), con coste de reposición, criticidad, condición, fabricante/modelo, historial de reparaciones y un indicador de "reparar vs. cambiar" por activo.
+- Filtro y alarma visual de activos cuya vida útil está próxima a acabar (horizonte de 2 años), con KPI clicable y badge de aviso en la tabla.
+- Acceso restringido a dos personas concretas del equipo mediante un permiso nuevo, independiente de `is_admin`, más una contraseña adicional propia de la sección (no el PIN habitual).
+- Exportación a CSV y PDF del listado filtrado.
 
 ### v3.3.0 (2026)
 **KPIs clicables como filtro en todas las secciones con estado**

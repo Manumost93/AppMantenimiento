@@ -119,7 +119,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <div className="text-slate-400 font-medium text-[11px]">APP Mantenimiento</div>
           <div>Desarrollado por</div>
           <div className="text-slate-300 font-medium">Manuel Honrado Vega</div>
-          <div className="text-slate-600 mt-0.5">v3.3.0 · 2026</div>
+          <div className="text-slate-600 mt-0.5">v3.4.0 · 2026</div>
         </div>
       </div>
     </aside>
