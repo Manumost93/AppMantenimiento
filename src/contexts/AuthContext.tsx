@@ -4,6 +4,7 @@ import type { TeamMember } from '@/types'
 interface AuthContextType {
   worker: TeamMember | null
   isAdmin: boolean
+  canViewAssetRegistry: boolean
   login: (worker: TeamMember) => void
   logout: () => void
   isLoading: boolean
@@ -38,9 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const isAdmin = worker?.is_admin === true
+  const canViewAssetRegistry = worker?.can_view_asset_registry === true
 
   return (
-    <AuthContext.Provider value={{ worker, isAdmin, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ worker, isAdmin, canViewAssetRegistry, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   )

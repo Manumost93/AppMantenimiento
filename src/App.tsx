@@ -33,6 +33,7 @@ const AuditLogPage  = lazy(() => import('@/pages/AuditLogPage'))
 const EdgeAssetsPage = lazy(() => import('@/pages/EdgeAssetsPage'))
 const EdgeOpsDashboardPage = lazy(() => import('@/pages/EdgeOpsDashboardPage'))
 const EdgeMonitoringPage = lazy(() => import('@/pages/EdgeMonitoringPage'))
+const CriticalAssetRegistryPage = lazy(() => import('@/pages/CriticalAssetRegistryPage'))
 
 function PageFallback() {
   return (
@@ -87,6 +88,7 @@ function AppRoutes() {
             <Route path="/edge-assets" element={<EdgeAssetsPage />} />
             <Route path="/edge-ops" element={<EdgeOpsDashboardPage />} />
             <Route path="/edge-monitoring" element={<EdgeMonitoringPage />} />
+            <Route path="/asset-registry" element={<CriticalAssetRegistryPage />} />
             <Route path="/settings"   element={<SettingsPage />} />
             <Route path="*"           element={<Navigate to="/calendar" replace />} />
           </Routes>

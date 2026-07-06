@@ -3,7 +3,7 @@ import {
   Calendar, LayoutDashboard, User, Users, Truck, FolderOpen,
   Building2, Paintbrush2, UtensilsCrossed, Wrench,
   BarChart2, Settings, ChevronRight, Shield, ClipboardCheck, ShieldAlert, BookOpen, Trash2,
-  HardHat, Thermometer, Radar, History, Server, Activity, Gauge
+  HardHat, Thermometer, Radar, History, Server, Activity, Gauge, Boxes
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -23,6 +23,7 @@ const navItems = [
   { path: '/edge-assets', icon: Server,           label: 'Activos Críticos',   section: 'critical', adminOnly: false },
   { path: '/edge-ops',  icon: Activity,           label: 'Dashboard EdgeOps',  section: 'critical', adminOnly: false },
   { path: '/edge-monitoring', icon: Gauge,        label: 'Monitorización',     section: 'critical', adminOnly: false },
+  { path: '/asset-registry', icon: Boxes,         label: 'Registro de Activos', section: 'critical', adminOnly: false, restrictedOnly: true },
   { path: '/meetings',  icon: BookOpen,           label: 'Reuniones',          section: 'work',   adminOnly: false },
   { path: '/waste',     icon: Trash2,             label: 'Residuos',           section: 'work',   adminOnly: false },
   { path: '/team',      icon: Users,              label: 'Equipo',             section: 'manage', adminOnly: false },
@@ -45,9 +46,11 @@ const sections = [
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const location = useLocation()
-  const { isAdmin } = useAuth()
+  const { isAdmin, canViewAssetRegistry } = useAuth()
 
-  const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin)
+  const visibleItems = navItems.filter(item =>
+    (!item.adminOnly || isAdmin) && (!item.restrictedOnly || canViewAssetRegistry)
+  )
 
   return (
     <aside className="flex flex-col bg-slate-900 text-white shrink-0 h-screen" style={{ width: 'var(--sidebar-width)' }}>

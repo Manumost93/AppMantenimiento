@@ -14,6 +14,7 @@ export interface TeamMember {
   color: string
   active: boolean
   is_admin?: boolean
+  can_view_asset_registry?: boolean
   pin_hash?: string
   observations?: string
   created_at?: string
@@ -465,6 +466,50 @@ export interface EdgeAsset {
 // Historial de reparaciones por activo (v3.2) — independiente de
 // EdgeAsset.repair_cost, que se mantiene como campo simple aparte.
 export interface EdgeAssetRepair {
+  id: number
+  asset_id: number
+  date: string
+  description: string
+  material_cost: number
+  labor_cost: number
+  total_cost: number
+  created_by_id?: number
+  created_by?: TeamMember
+  created_at: string
+}
+
+// ─── Registro de Activos Críticos (CAFM real) ─────────────────────────────────
+// Acceso restringido a workers.can_view_asset_registry + contraseña adicional.
+// Módulo independiente de EdgeAsset (que es la demo de Edge/Data Center Lite).
+
+export interface CriticalAsset {
+  id: number
+  asset_code: string
+  organization?: string
+  unit_id?: string
+  classification_code?: string
+  classification_name?: string
+  description: string
+  end_date?: string
+  replacement_cost: number
+  status?: string
+  criticality?: number
+  condition?: number
+  installation_date?: string
+  manufacturer?: string
+  model?: string
+  additional_info_1?: string
+  additional_info_2?: string
+  additional_info_3?: string
+  parent_asset_code?: string
+  location_code?: string
+  location_description?: string
+  estimated_lifespan_years?: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CriticalAssetRepair {
   id: number
   asset_id: number
   date: string

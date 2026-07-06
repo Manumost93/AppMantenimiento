@@ -4,7 +4,7 @@ import type {
   CominIonJob, FoodIncident, GeneralRepair,
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
-  AuditLog, EdgeAsset, EdgeAssetRepair,
+  AuditLog, EdgeAsset, EdgeAssetRepair, CriticalAsset, CriticalAssetRepair,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -1197,4 +1197,79 @@ export async function createEdgeAssetRepair(repair: Omit<EdgeAssetRepair, 'id' |
     description: `Reparación registrada (${result.total_cost}€): ${repair.description}`,
   })
   return result
+}
+
+// ─── Registro de Activos Críticos (CAFM real) ─────────────────────────────────
+// Acceso restringido — ver AssetRegistryUnlockContext y CriticalAssetRegistryPage.
+
+export async function getCriticalAssets(): Promise<CriticalAsset[]> {
+  const { data, error } = await supabase
+    .from('critical_assets')
+    .select('*')
+    .order('description')
+  if (error) throw error
+  return (data ?? []) as CriticalAsset[]
+}
+
+export async function upsertCriticalAsset(asset: Partial<CriticalAsset>): Promise<CriticalAsset> {
+  const { created_at, ...payload } = asset as CriticalAsset & { created_at?: unknown }
+  const { data, error } = await supabase
+    .from('critical_assets')
+    .upsert({ ...payload, updated_at: new Date().toISOString() })
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as CriticalAsset
+}
+
+export async function getCriticalAssetRepairsSummary(): Promise<{ asset_id: number; total_cost: number }[]> {
+  const { data, error } = await supabase
+    .from('critical_asset_repairs')
+    .select('asset_id, total_cost')
+  if (error) throw error
+  return (data ?? []) as { asset_id: number; total_cost: number }[]
+}
+
+export async function getCriticalAssetRepairs(assetId: number): Promise<CriticalAssetRepair[]> {
+  const { data, error } = await supabase
+    .from('critical_asset_repairs')
+    .select('*, created_by:workers(id,name,color)')
+    .eq('asset_id', assetId)
+    .order('date', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(r => ({ ...r, created_by: r.created_by ?? undefined })) as CriticalAssetRepair[]
+}
+
+export async function createCriticalAssetRepair(repair: Omit<CriticalAssetRepair, 'id' | 'total_cost' | 'created_at' | 'created_by'>): Promise<CriticalAssetRepair> {
+  const { data, error } = await supabase
+    .from('critical_asset_repairs')
+    .insert(repair)
+    .select('*, created_by:workers(id,name,color)')
+    .single()
+  if (error) throw error
+  return { ...data, created_by: data.created_by ?? undefined } as CriticalAssetRepair
+}
+
+export async function getCriticalRegistryPassphraseHash(): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('critical_registry_access')
+    .select('passphrase_hash')
+    .eq('id', 1)
+    .maybeSingle()
+  if (error) throw error
+  return data?.passphrase_hash ?? null
+}
+
+export async function setCriticalRegistryPassphrase(passphrase: string): Promise<void> {
+  const bcrypt = await import('bcryptjs')
+  const passphrase_hash = await bcrypt.hash(passphrase, 8)
+  const { error } = await supabase
+    .from('critical_registry_access')
+    .upsert({ id: 1, passphrase_hash, updated_at: new Date().toISOString() })
+  if (error) throw error
+}
+
+export async function verifyCriticalRegistryPassphrase(passphrase: string, hash: string): Promise<boolean> {
+  const bcrypt = await import('bcryptjs')
+  return bcrypt.compare(passphrase, hash)
 }
