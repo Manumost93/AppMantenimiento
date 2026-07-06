@@ -25,6 +25,7 @@ No es una demo ni un proyecto de prueba: es la aplicación real que usa el equip
 | Entorno | URL |
 |---|---|
 | **Producción (Vercel)** | *(URL de Vercel del proyecto)* |
+| **Repositorio** | [github.com/Manumost93/AppMantenimiento](https://github.com/Manumost93/AppMantenimiento) |
 | **Base de datos** | Supabase (PostgreSQL + Storage + Realtime) |
 | **Autenticación** | PIN de 6 dígitos por trabajador (hasheado con bcrypt) |
 
