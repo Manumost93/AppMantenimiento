@@ -630,13 +630,10 @@ export default function RondasPage() {
 
   async function handleSave() {
     setSaving(true)
+    let saved: RondaEntry
     try {
-      // 1. Generate PDF blobs before saving (needs wForm)
-      const blobFormulario = generateFormularioPDF(wForm)
-      const blobLecturas = generateLecturasPDF(wForm)
-
-      // 2. Save ronda to DB
-      const saved = await upsertRonda({
+      // 1. Save ronda to DB first — this must succeed independently of the PDFs
+      saved = await upsertRonda({
         fecha: wForm.fecha,
         hora: wForm.hora_inicio,
         tipo: wForm.tipo as TipoRonda,
@@ -651,24 +648,34 @@ export default function RondasPage() {
           checks: wForm.checks,
         }),
       })
+    } catch (e) {
+      console.error('Error guardando ronda:', e)
+      const msg = e instanceof Error ? e.message : ''
+      toast.error(msg ? `Error al guardar la ronda: ${msg}` : 'Error al guardar la ronda.')
+      setSaving(false)
+      return
+    }
 
-      // 3. Upload PDFs to Supabase Storage (non-blocking, best-effort)
-      uploadRondaPDF(blobFormulario, `${saved.id}-formulario.pdf`).then(urlF =>
-        uploadRondaPDF(blobLecturas, `${saved.id}-lecturas.pdf`).then(urlL => {
-          if (urlF && urlL) patchRondaObservaciones(saved.id, { pdf_formulario_url: urlF, pdf_lecturas_url: urlL })
-        })
-      )
+    const withWorker = { ...saved, worker: workers.find(w => w.id === saved.worker_id) }
+    setRondas(prev => {
+      const exists = prev.some(r => r.id === saved.id)
+      return exists ? prev.map(r => r.id === saved.id ? withWorker : r) : [withWorker, ...prev]
+    })
+    setWizardOn(false)
+    toast.success('Ronda guardada correctamente')
+    setSaving(false)
 
-      const withWorker = { ...saved, worker: workers.find(w => w.id === saved.worker_id) }
-      setRondas(prev => {
-        const exists = prev.some(r => r.id === saved.id)
-        return exists ? prev.map(r => r.id === saved.id ? withWorker : r) : [withWorker, ...prev]
-      })
-      setWizardOn(false)
-      toast.success('Ronda guardada correctamente')
-    } catch {
-      toast.error('Error al guardar la ronda.')
-    } finally { setSaving(false) }
+    // 2. Generate + upload PDFs best-effort — a failure here must never undo the save above
+    try {
+      const blobFormulario = generateFormularioPDF(wForm)
+      const blobLecturas = generateLecturasPDF(wForm)
+      const urlF = await uploadRondaPDF(blobFormulario, `${saved.id}-formulario.pdf`)
+      const urlL = await uploadRondaPDF(blobLecturas, `${saved.id}-lecturas.pdf`)
+      if (urlF && urlL) await patchRondaObservaciones(saved.id, { pdf_formulario_url: urlF, pdf_lecturas_url: urlL })
+    } catch (e) {
+      console.error('Error generando/subiendo los PDFs de la ronda:', e)
+      toast.error('La ronda se guardó, pero hubo un problema generando o subiendo los PDFs.')
+    }
   }
 
   async function handleDelete(id: number) {
