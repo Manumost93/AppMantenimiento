@@ -2,19 +2,21 @@ import { useState, useEffect } from 'react'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/contexts/ConfirmContext'
-import { Plus, Trash2, Edit2, Search } from 'lucide-react'
+import { Plus, Trash2, Edit2, Search, Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
-import { getFoodIncidents, upsertFoodIncident, deleteFoodIncident, getWorkers } from '@/lib/supabase'
-import type { FoodIncident, TeamMember } from '@/types'
+import { getFoodIncidents, upsertFoodIncident, deleteFoodIncident, getWorkers, getCriticalAssetsLite } from '@/lib/supabase'
+import type { FoodIncident, TeamMember, CriticalAssetLite } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, formatCurrency, formatDateShort, todayIso } from '@/lib/utils'
 import { PageLoading } from '@/components/Skeleton'
+import CriticalAssetPicker from '@/components/CriticalAssetPicker'
 
 export default function FoodPage() {
   const toast = useToast()
   const confirm = useConfirm()
   const { data: incidents, setData: setIncidents, loading } = useRealtimeTable('food_incidents', getFoodIncidents)
   const [workers, setWorkers] = useState<TeamMember[]>([])
+  const [criticalAssets, setCriticalAssets] = useState<CriticalAssetLite[]>([])
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [showDialog, setShowDialog] = useState(false)
@@ -24,7 +26,14 @@ export default function FoodPage() {
 
   useEffect(() => {
     getWorkers().then(setWorkers)
+    getCriticalAssetsLite().then(setCriticalAssets)
   }, [])
+
+  function linkedAssetLabel(id?: number) {
+    if (!id) return undefined
+    const a = criticalAssets.find(c => c.id === id)
+    return a ? `${a.asset_code} · ${a.description}` : undefined
+  }
 
   const filtered = incidents.filter(i =>
     (!search || i.affected_element.toLowerCase().includes(search.toLowerCase()) || i.restaurant_zone.toLowerCase().includes(search.toLowerCase())) &&
@@ -148,7 +157,16 @@ export default function FoodPage() {
               <tr key={inc.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2.5 text-xs whitespace-nowrap">{formatDateShort(inc.date)}</td>
                 <td className="px-3 py-2.5 text-xs">{inc.restaurant_zone}</td>
-                <td className="px-3 py-2.5 text-xs max-w-[140px]"><div className="truncate">{inc.affected_element}</div></td>
+                <td className="px-3 py-2.5 text-xs max-w-[140px]">
+                  <div className="flex items-center gap-1">
+                    <span className="truncate">{inc.affected_element}</span>
+                    {inc.critical_asset_id && (
+                      <span title={`Vinculado a: ${linkedAssetLabel(inc.critical_asset_id) ?? ''}`}>
+                        <Link2 size={11} className="text-blue-500 shrink-0" />
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-3 py-2.5 text-xs text-gray-500">{inc.breakdown_type}</td>
                 <td className="px-3 py-2.5 text-xs">{inc.internal_responsible?.name?.split(' ')[0] || '—'}</td>
                 <td className="px-3 py-2.5 text-xs font-medium whitespace-nowrap">{formatCurrency(inc.total_cost)}</td>
@@ -226,6 +244,13 @@ export default function FoodPage() {
               value={form.status || 'pending'} onChange={e => setForm(f => ({ ...f, status: e.target.value as FoodIncident['status'] }))}>
               {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
+          </div>
+          <div className="col-span-full">
+            <label className="block text-xs font-medium text-gray-700 mb-1">Vincular a activo crítico (opcional)</label>
+            <CriticalAssetPicker
+              value={form.critical_asset_id}
+              onChange={id => setForm(f => ({ ...f, critical_asset_id: id }))}
+            />
           </div>
           <div className="col-span-full flex gap-2 pt-2 border-t border-gray-100">
             <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)} disabled={saving}>Cancelar</Button>

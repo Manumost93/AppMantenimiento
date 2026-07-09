@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/contexts/ConfirmContext'
-import { Plus, Search, Wrench, CheckCircle2, Clock, AlertCircle, Edit2, Trash2, Eye, Camera } from 'lucide-react'
+import { Plus, Search, Wrench, CheckCircle2, Clock, AlertCircle, Edit2, Trash2, Eye, Camera, Link2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
-import { getRepairs, upsertRepair, deleteRepair, getWorkers, getAreas, patchRepairPhotos } from '@/lib/supabase'
-import type { GeneralRepair, TeamMember, Area } from '@/types'
+import { getRepairs, upsertRepair, deleteRepair, getWorkers, getAreas, patchRepairPhotos, getCriticalAssetsLite } from '@/lib/supabase'
+import type { GeneralRepair, TeamMember, Area, CriticalAssetLite } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, PRIORITY_LABELS, PRIORITY_CLASSES, formatCurrency, formatDateShort, todayIso, getInitials } from '@/lib/utils'
 import PhotoUpload from '@/components/PhotoUpload'
+import CriticalAssetPicker from '@/components/CriticalAssetPicker'
 import { PageLoading } from '@/components/Skeleton'
 
 export default function RepairsPage() {
@@ -18,6 +19,7 @@ export default function RepairsPage() {
   const { data: repairs, setData: setRepairs, loading } = useRealtimeTable('general_repairs', getRepairs)
   const [workers, setWorkers] = useState<TeamMember[]>([])
   const [areas, setAreas] = useState<Area[]>([])
+  const [criticalAssets, setCriticalAssets] = useState<CriticalAssetLite[]>([])
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterMember, setFilterMember] = useState('')
@@ -30,8 +32,14 @@ export default function RepairsPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    Promise.all([getWorkers(), getAreas()]).then(([w, a]) => { setWorkers(w); setAreas(a) })
+    Promise.all([getWorkers(), getAreas(), getCriticalAssetsLite()]).then(([w, a, c]) => { setWorkers(w); setAreas(a); setCriticalAssets(c) })
   }, [])
+
+  function linkedAssetLabel(id?: number) {
+    if (!id) return undefined
+    const a = criticalAssets.find(c => c.id === id)
+    return a ? `${a.asset_code} · ${a.description}` : undefined
+  }
 
   const filtered = repairs.filter(r =>
     (!search || r.description.toLowerCase().includes(search.toLowerCase()) || r.area?.toLowerCase().includes(search.toLowerCase())) &&
@@ -221,7 +229,14 @@ export default function RepairsPage() {
                 <td className="px-4 py-2.5 text-xs text-gray-600 dark:text-slate-300 whitespace-nowrap">{formatDateShort(repair.request_date)}</td>
                 <td className="px-4 py-2.5 text-xs text-gray-600 dark:text-slate-300 whitespace-nowrap">{repair.area || '—'}</td>
                 <td className="px-4 py-2.5 text-xs text-gray-800 dark:text-slate-200 max-w-[200px]">
-                  <div className="truncate">{repair.description}</div>
+                  <div className="flex items-center gap-1">
+                    <span className="truncate">{repair.description}</span>
+                    {repair.critical_asset_id && (
+                      <span title={`Vinculado a: ${linkedAssetLabel(repair.critical_asset_id) ?? ''}`}>
+                        <Link2 size={11} className="text-blue-500 shrink-0" />
+                      </span>
+                    )}
+                  </div>
                   {repair.blocked_by_material && <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">⏸ Esperando material</span>}
                 </td>
                 <td className="px-4 py-2.5">
@@ -346,6 +361,13 @@ export default function RepairsPage() {
               <div>
                 <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Empresa externa</p>
                 <p className="text-sm text-gray-700 dark:text-slate-200">{selected.external_company}</p>
+              </div>
+            )}
+
+            {selected.critical_asset_id && (
+              <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2.5">
+                <Link2 size={13} />
+                <span className="text-xs font-medium">Vinculado a: {linkedAssetLabel(selected.critical_asset_id) ?? `activo #${selected.critical_asset_id}`}</span>
               </div>
             )}
 
@@ -475,6 +497,13 @@ export default function RepairsPage() {
             <textarea className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-slate-700 dark:text-white" rows={3}
               value={form.description || ''}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div className="col-span-full">
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Vincular a activo crítico (opcional)</label>
+            <CriticalAssetPicker
+              value={form.critical_asset_id}
+              onChange={id => setForm(f => ({ ...f, critical_asset_id: id }))}
+            />
           </div>
           <div className="col-span-full">
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Materiales necesarios</label>

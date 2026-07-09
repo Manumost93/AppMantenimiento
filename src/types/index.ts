@@ -107,6 +107,7 @@ export interface KoneIncident {
   status: TaskStatus
   priority: TaskPriority
   observations?: string
+  critical_asset_id?: number
   created_at: string
 }
 
@@ -152,6 +153,7 @@ export interface FoodIncident {
   status: TaskStatus
   priority: TaskPriority
   observations?: string
+  critical_asset_id?: number
   created_at: string
 }
 
@@ -177,6 +179,7 @@ export interface GeneralRepair {
   external_company?: string
   observations?: string
   photos?: string[]
+  critical_asset_id?: number
   created_at: string
 }
 
@@ -373,6 +376,7 @@ export interface BmsIncident {
   alarm_code?: string
   resolved_at?: string
   resolution_notes?: string
+  critical_asset_id?: number
   created_at: string
 }
 
@@ -507,6 +511,15 @@ export interface CriticalAsset {
   estimated_lifespan_years?: number
   created_at: string
   updated_at: string
+}
+
+// Versión "ligera" para el selector usado en Reparaciones/KONE/BMS/FOOD —
+// deliberadamente sin coste ni criticidad: la usa cualquier trabajador, no
+// solo quien tiene acceso al Registro de Activos restringido.
+export interface CriticalAssetLite {
+  id: number
+  asset_code: string
+  description: string
 }
 
 export interface CriticalAssetRepair {

@@ -17,8 +17,11 @@ import {
   getCriticalAssets, upsertCriticalAsset, getCriticalAssetRepairs, createCriticalAssetRepair,
   getCriticalAssetRepairsSummary, getCriticalRegistryPassphraseHash, setCriticalRegistryPassphrase,
   verifyCriticalRegistryPassphrase, getCriticalAssetAuditLog, createAuditLog, getAllCriticalAssetRepairs,
+  getGeneralRepairsCostByAsset, getKoneIncidentsCostByAsset, getFoodIncidentsCostByAsset,
+  getLinkedRecordsForAsset, getAllLinkedRepairsCosts,
 } from '@/lib/supabase'
 import type { CriticalAsset, CriticalAssetRepair, AuditLog } from '@/types'
+import type { LinkedAssetRecord } from '@/lib/supabase'
 import { cn, formatCurrency, todayIso } from '@/lib/utils'
 import { PageLoading } from '@/components/Skeleton'
 
@@ -285,14 +288,26 @@ function RegistryContent({ workerId, workerName }: { workerId?: number; workerNa
   const [assetAuditLog, setAssetAuditLog] = useState<AuditLog[]>([])
   const [loadingAuditLog, setLoadingAuditLog] = useState(false)
   const [generatingQr, setGeneratingQr] = useState(false)
+  const [linkedRecords, setLinkedRecords] = useState<LinkedAssetRecord[]>([])
+  const [loadingLinkedRecords, setLoadingLinkedRecords] = useState(false)
 
   useEffect(() => {
-    getCriticalAssetRepairsSummary().then(rows => {
+    Promise.all([
+      getCriticalAssetRepairsSummary(),
+      getGeneralRepairsCostByAsset(),
+      getKoneIncidentsCostByAsset(),
+      getFoodIncidentsCostByAsset(),
+    ]).then(([ownRepairs, generalRepairs, koneIncidents, foodIncidents]) => {
       const m = new Map<number, number>()
-      for (const r of rows) m.set(r.asset_id, (m.get(r.asset_id) ?? 0) + Number(r.total_cost))
+      for (const r of ownRepairs) m.set(r.asset_id, (m.get(r.asset_id) ?? 0) + Number(r.total_cost))
+      for (const r of [...generalRepairs, ...koneIncidents, ...foodIncidents]) {
+        m.set(r.critical_asset_id, (m.get(r.critical_asset_id) ?? 0) + Number(r.total_cost))
+      }
       setRepairTotals(m)
     })
-    getAllCriticalAssetRepairs().then(setAllRepairs)
+    Promise.all([getAllCriticalAssetRepairs(), getAllLinkedRepairsCosts()]).then(([own, linked]) => {
+      setAllRepairs([...own, ...linked])
+    })
   }, [])
 
   const classifications = useMemo(
@@ -439,6 +454,8 @@ function RegistryContent({ workerId, workerName }: { workerId?: number; workerNa
     getCriticalAssetRepairs(asset.id).then(setRepairs).finally(() => setLoadingRepairs(false))
     setLoadingAuditLog(true)
     getCriticalAssetAuditLog(asset.id).then(setAssetAuditLog).finally(() => setLoadingAuditLog(false))
+    setLoadingLinkedRecords(true)
+    getLinkedRecordsForAsset(asset.id).then(setLinkedRecords).finally(() => setLoadingLinkedRecords(false))
   }
 
   function openDetailByCode(code: string) {
@@ -1020,6 +1037,28 @@ function RegistryContent({ workerId, workerName }: { workerId?: number; workerNa
                   ))}
                 </div>
               )}
+
+              {/* Registros vinculados desde Reparaciones/KONE/BMS/FOOD — solo lectura */}
+              {!loadingLinkedRecords && linkedRecords.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-medium text-gray-500 dark:text-slate-400 flex items-center gap-1">
+                    <Link2 size={11} /> Vinculados desde otros módulos (solo lectura — edita en el módulo original)
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {linkedRecords.map((r, i) => (
+                      <div key={i} className="border border-blue-100 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-900/10 rounded-lg px-3 py-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40">[{r.source}]</span>
+                          <span className="text-xs font-bold text-gray-800 dark:text-slate-100">{r.cost > 0 ? formatCurrency(r.cost) : '—'}</span>
+                        </div>
+                        <p className="text-xs text-gray-600 dark:text-slate-300 mt-0.5">{r.description}</p>
+                        <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-0.5">{formatDate(r.date)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Fecha</label>

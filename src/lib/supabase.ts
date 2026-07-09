@@ -4,7 +4,7 @@ import type {
   CominIonJob, FoodIncident, GeneralRepair,
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
-  AuditLog, EdgeAsset, EdgeAssetRepair, CriticalAsset, CriticalAssetRepair,
+  AuditLog, EdgeAsset, EdgeAssetRepair, CriticalAsset, CriticalAssetRepair, CriticalAssetLite,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -1248,6 +1248,93 @@ export async function createCriticalAssetRepair(repair: Omit<CriticalAssetRepair
     .single()
   if (error) throw error
   return { ...data, created_by: data.created_by ?? undefined } as CriticalAssetRepair
+}
+
+// Versión ligera para el selector usado en Reparaciones/KONE/BMS/FOOD — nunca
+// incluye coste de reposición ni criticidad (ver CriticalAssetLite).
+export async function getCriticalAssetsLite(): Promise<CriticalAssetLite[]> {
+  const { data, error } = await supabase
+    .from('critical_assets')
+    .select('id, asset_code, description')
+    .order('description')
+  if (error) throw error
+  return (data ?? []) as CriticalAssetLite[]
+}
+
+// ─── Coste vinculado desde otros módulos (Reparaciones/KONE/FOOD) ────────────
+// BMS no tiene campo de coste — el vínculo con BMS es solo trazabilidad.
+
+export async function getGeneralRepairsCostByAsset(): Promise<{ critical_asset_id: number; total_cost: number }[]> {
+  const { data, error } = await supabase
+    .from('general_repairs')
+    .select('critical_asset_id, total_cost')
+    .not('critical_asset_id', 'is', null)
+  if (error) throw error
+  return (data ?? []) as { critical_asset_id: number; total_cost: number }[]
+}
+
+export async function getKoneIncidentsCostByAsset(): Promise<{ critical_asset_id: number; total_cost: number }[]> {
+  const { data, error } = await supabase
+    .from('kone_incidents')
+    .select('critical_asset_id, total_cost')
+    .not('critical_asset_id', 'is', null)
+  if (error) throw error
+  return (data ?? []) as { critical_asset_id: number; total_cost: number }[]
+}
+
+export async function getFoodIncidentsCostByAsset(): Promise<{ critical_asset_id: number; total_cost: number }[]> {
+  const { data, error } = await supabase
+    .from('food_incidents')
+    .select('critical_asset_id, total_cost')
+    .not('critical_asset_id', 'is', null)
+  if (error) throw error
+  return (data ?? []) as { critical_asset_id: number; total_cost: number }[]
+}
+
+export interface LinkedAssetRecord {
+  source: 'Reparaciones' | 'KONE' | 'BMS' | 'FOOD'
+  date: string
+  description: string
+  cost: number
+}
+
+export async function getLinkedRecordsForAsset(assetId: number): Promise<LinkedAssetRecord[]> {
+  const [repairs, kone, bms, food] = await Promise.all([
+    supabase.from('general_repairs').select('request_date, description, total_cost').eq('critical_asset_id', assetId),
+    supabase.from('kone_incidents').select('date, description, total_cost').eq('critical_asset_id', assetId),
+    supabase.from('bms_incidents').select('created_at, description').eq('critical_asset_id', assetId),
+    supabase.from('food_incidents').select('date, breakdown_type, total_cost').eq('critical_asset_id', assetId),
+  ])
+  if (repairs.error) throw repairs.error
+  if (kone.error) throw kone.error
+  if (bms.error) throw bms.error
+  if (food.error) throw food.error
+
+  const records: LinkedAssetRecord[] = [
+    ...(repairs.data ?? []).map(r => ({ source: 'Reparaciones' as const, date: r.request_date, description: r.description, cost: Number(r.total_cost) })),
+    ...(kone.data ?? []).map(r => ({ source: 'KONE' as const, date: r.date, description: r.description, cost: Number(r.total_cost) })),
+    ...(bms.data ?? []).map(r => ({ source: 'BMS' as const, date: r.created_at?.slice(0, 10), description: r.description, cost: 0 })),
+    ...(food.data ?? []).map(r => ({ source: 'FOOD' as const, date: r.date, description: r.breakdown_type, cost: Number(r.total_cost) })),
+  ]
+  return records.sort((a, b) => (a.date < b.date ? 1 : -1))
+}
+
+// Fechas+coste de todo lo vinculado desde otros módulos (para la gráfica de
+// evolución mensual del Registro de Activos) — sin agrupar por activo.
+export async function getAllLinkedRepairsCosts(): Promise<{ date: string; total_cost: number }[]> {
+  const [repairs, kone, food] = await Promise.all([
+    supabase.from('general_repairs').select('request_date, total_cost').not('critical_asset_id', 'is', null),
+    supabase.from('kone_incidents').select('date, total_cost').not('critical_asset_id', 'is', null),
+    supabase.from('food_incidents').select('date, total_cost').not('critical_asset_id', 'is', null),
+  ])
+  if (repairs.error) throw repairs.error
+  if (kone.error) throw kone.error
+  if (food.error) throw food.error
+  return [
+    ...(repairs.data ?? []).map(r => ({ date: r.request_date, total_cost: Number(r.total_cost) })),
+    ...(kone.data ?? []).map(r => ({ date: r.date, total_cost: Number(r.total_cost) })),
+    ...(food.data ?? []).map(r => ({ date: r.date, total_cost: Number(r.total_cost) })),
+  ]
 }
 
 export async function getAllCriticalAssetRepairs(): Promise<{ date: string; total_cost: number }[]> {

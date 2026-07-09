@@ -2,16 +2,18 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/contexts/ConfirmContext'
-import { Plus, Trash2, Edit2, Search, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, Edit2, Search, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import {
   getKoneIncidents, upsertKoneIncident, deleteKoneIncident,
   getWorkers, getKoneMonthlyChecks, upsertKoneMonthlyCheck, deleteKoneMonthlyCheck,
+  getCriticalAssetsLite,
 } from '@/lib/supabase'
-import type { KoneIncident, KoneMonthlyCheck, TeamMember } from '@/types'
+import type { KoneIncident, KoneMonthlyCheck, TeamMember, CriticalAssetLite } from '@/types'
 import { cn, STATUS_LABELS, STATUS_CLASSES, formatCurrency, formatDateShort, todayIso } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
+import CriticalAssetPicker from '@/components/CriticalAssetPicker'
 
 // ─── Equipment catalog ────────────────────────────────────────────────────────
 
@@ -113,6 +115,7 @@ export default function KonePage() {
   const confirm = useConfirm()
   const { data: incidents, setData: setIncidents, loading } = useRealtimeTable('kone_incidents', getKoneIncidents)
   const [workers, setWorkers] = useState<TeamMember[]>([])
+  const [criticalAssets, setCriticalAssets] = useState<CriticalAssetLite[]>([])
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [showDialog, setShowDialog] = useState(false)
@@ -123,7 +126,14 @@ export default function KonePage() {
   // Initial loads
   useEffect(() => {
     getWorkers().then(setWorkers)
+    getCriticalAssetsLite().then(setCriticalAssets)
   }, [])
+
+  function linkedAssetLabel(id?: number) {
+    if (!id) return undefined
+    const a = criticalAssets.find(c => c.id === id)
+    return a ? `${a.asset_code} · ${a.description}` : undefined
+  }
 
   const loadMonthlyChecks = useCallback(async () => {
     setChecksLoading(true)
@@ -444,7 +454,16 @@ export default function KonePage() {
                       <td className="px-3 py-2.5 text-xs whitespace-nowrap text-gray-600 dark:text-slate-300">{formatDateShort(inc.date)}</td>
                       <td className="px-3 py-2.5 text-xs font-medium text-gray-800 dark:text-white">{inc.elevator}</td>
                       <td className="px-3 py-2.5 text-xs text-gray-500 dark:text-slate-400">{inc.incident_type}</td>
-                      <td className="px-3 py-2.5 text-xs max-w-[160px]"><div className="truncate text-gray-700 dark:text-slate-300">{inc.description}</div></td>
+                      <td className="px-3 py-2.5 text-xs max-w-[160px]">
+                        <div className="flex items-center gap-1">
+                          <span className="truncate text-gray-700 dark:text-slate-300">{inc.description}</span>
+                          {inc.critical_asset_id && (
+                            <span title={`Vinculado a: ${linkedAssetLabel(inc.critical_asset_id) ?? ''}`}>
+                              <Link2 size={11} className="text-blue-500 shrink-0" />
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 py-2.5 text-xs text-gray-600 dark:text-slate-300">{inc.internal_responsible?.name?.split(' ')[0] || '—'}</td>
                       <td className="px-3 py-2.5 text-xs font-medium whitespace-nowrap text-gray-800 dark:text-white">{formatCurrency(inc.total_cost)}</td>
                       <td className="px-3 py-2.5">
@@ -546,6 +565,13 @@ export default function KonePage() {
               value={form.status || 'pending'} onChange={e => setForm(f => ({ ...f, status: e.target.value as KoneIncident['status'] }))}>
               {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
+          </div>
+          <div className="col-span-full">
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Vincular a activo crítico (opcional)</label>
+            <CriticalAssetPicker
+              value={form.critical_asset_id}
+              onChange={id => setForm(f => ({ ...f, critical_asset_id: id }))}
+            />
           </div>
           <div className="col-span-full">
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Descripción *</label>

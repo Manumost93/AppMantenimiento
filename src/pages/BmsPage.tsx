@@ -2,15 +2,16 @@ import { useState, useEffect } from 'react'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/contexts/ConfirmContext'
-import { Plus, Edit2, Trash2, Thermometer, Wind, Zap, Droplets, Fan, AlertTriangle, CheckCircle2, PowerOff, Wrench, ChevronDown, ChevronRight, X } from 'lucide-react'
+import { Plus, Edit2, Trash2, Thermometer, Wind, Zap, Droplets, Fan, AlertTriangle, CheckCircle2, PowerOff, Wrench, ChevronDown, ChevronRight, X, Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Card, CardContent } from '@/components/ui/card'
-import { getBmsEquipment, upsertBmsEquipment, deleteBmsEquipment, getBmsIncidents, upsertBmsIncident, deleteBmsIncident, updateBmsEquipmentStatus, getWorkers } from '@/lib/supabase'
-import type { BmsEquipment, BmsEquipmentType, BmsEquipmentStatus, BmsIncident, BmsIncidentType, TeamMember } from '@/types'
+import { getBmsEquipment, upsertBmsEquipment, deleteBmsEquipment, getBmsIncidents, upsertBmsIncident, deleteBmsIncident, updateBmsEquipmentStatus, getWorkers, getCriticalAssetsLite } from '@/lib/supabase'
+import type { BmsEquipment, BmsEquipmentType, BmsEquipmentStatus, BmsIncident, BmsIncidentType, TeamMember, CriticalAssetLite } from '@/types'
 import { cn, formatDateShort, todayIso, getInitials } from '@/lib/utils'
 import { PageLoading } from '@/components/Skeleton'
 import { useAuth } from '@/contexts/AuthContext'
+import CriticalAssetPicker from '@/components/CriticalAssetPicker'
 
 // ─── Mapas de etiquetas e iconos ──────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ export default function BmsPage() {
   const { data: incidents, setData: setIncidents, loading: loadingInc } = useRealtimeTable('bms_incidents', getBmsIncidents)
   const loading = loadingEq || loadingInc
   const [workers, setWorkers] = useState<TeamMember[]>([])
+  const [criticalAssets, setCriticalAssets] = useState<CriticalAssetLite[]>([])
   const [activeTab, setActiveTab] = useState<'equipment' | 'incidents'>('equipment')
   const [filterStatus, setFilterStatus] = useState<BmsEquipmentStatus | ''>('')
   const [filterZone, setFilterZone] = useState('')
@@ -88,7 +90,14 @@ export default function BmsPage() {
 
   useEffect(() => {
     getWorkers().then(w => setWorkers(w.filter(w => w.active)))
+    getCriticalAssetsLite().then(setCriticalAssets)
   }, [])
+
+  function linkedAssetLabel(id?: number) {
+    if (!id) return undefined
+    const a = criticalAssets.find(c => c.id === id)
+    return a ? `${a.asset_code} · ${a.description}` : undefined
+  }
 
   const zones = [...new Set(equipment.map(e => e.zone).filter(Boolean))] as string[]
 
@@ -449,7 +458,14 @@ export default function BmsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-gray-800 dark:text-slate-200 max-w-[200px]">
-                      <div className="truncate">{inc.description}</div>
+                      <div className="flex items-center gap-1">
+                        <span className="truncate">{inc.description}</span>
+                        {inc.critical_asset_id && (
+                          <span title={`Vinculado a: ${linkedAssetLabel(inc.critical_asset_id) ?? ''}`}>
+                            <Link2 size={11} className="text-blue-500 shrink-0" />
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium', INCIDENT_STATUS_CLASSES[inc.status])}>
@@ -580,6 +596,13 @@ export default function BmsPage() {
             <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Descripción *</label>
             <textarea className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-slate-700 dark:text-white" rows={3}
               placeholder="Describe la incidencia..." value={incidentForm.description || ''} onChange={e => setIncidentForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Vincular a activo crítico (opcional)</label>
+            <CriticalAssetPicker
+              value={incidentForm.critical_asset_id}
+              onChange={id => setIncidentForm(f => ({ ...f, critical_asset_id: id }))}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
