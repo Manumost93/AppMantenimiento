@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Boxes, Search, Lock, ShieldOff, FileDown, FileSpreadsheet,
   Wrench, AlertTriangle, Euro, Layers, CalendarClock, Clock,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, List, BarChart3, Link2, GitBranch,
 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -65,6 +65,30 @@ function endOfLifeBadge(days: number | null) {
   if (days <= 180) return { label: `${days}d`, cls: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 font-bold' }
   if (days <= 365) return { label: `${days}d`, cls: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' }
   return { label: `${days}d`, cls: 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' }
+}
+
+// ─── Panel de análisis: barras horizontales sin librería (mismo patrón que EdgeOpsDashboardPage) ──
+
+function BarRow({ label, value, max, colorClass, formatValue, onClick }: {
+  label: string; value: number; max: number; colorClass: string; formatValue: (v: number) => string; onClick?: () => void
+}) {
+  const pct = max > 0 ? (value / max) * 100 : 0
+  const content = (
+    <div className="flex items-center gap-3">
+      <span className={cn('w-36 text-xs truncate shrink-0 text-left', onClick ? 'text-blue-600 dark:text-blue-400 hover:underline' : 'text-gray-600 dark:text-slate-300')}>{label}</span>
+      <div className="flex-1 h-4 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all', colorClass)} style={{ width: `${Math.max(pct, value > 0 ? 2 : 0)}%` }} />
+      </div>
+      <span className="w-24 text-right text-xs font-bold text-gray-700 dark:text-slate-200 shrink-0">{formatValue(value)}</span>
+    </div>
+  )
+  return onClick
+    ? <button onClick={onClick} className="w-full focus:outline-none">{content}</button>
+    : content
+}
+
+const CRITICALITY_LEVEL_COLOR: Record<number, string> = {
+  1: 'bg-red-600', 2: 'bg-orange-500', 3: 'bg-amber-500', 4: 'bg-yellow-500', 5: 'bg-gray-400',
 }
 
 // ─── Gate de acceso: permiso + contraseña adicional ───────────────────────────
@@ -204,6 +228,7 @@ function RegistryContent({ workerId }: { workerId?: number }) {
   const [kpiFilter, setKpiFilter] = useState('')
   const [sortColumn, setSortColumn] = useState<SortColumn>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list')
 
   const [selected, setSelected] = useState<CriticalAsset | null>(null)
   const [form, setForm] = useState<Partial<CriticalAsset>>({})
@@ -229,6 +254,46 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     () => [...new Set(assets.map(a => a.location_description).filter(Boolean))].sort() as string[],
     [assets]
   )
+
+  // Jerarquía padre-hijo (solo lectura, navegación) ─────────────────────────
+  const assetsByCode = useMemo(() => new Map(assets.map(a => [a.asset_code, a])), [assets])
+  const childrenByCode = useMemo(() => {
+    const m = new Map<string, CriticalAsset[]>()
+    for (const a of assets) {
+      if (!a.parent_asset_code) continue
+      if (!m.has(a.parent_asset_code)) m.set(a.parent_asset_code, [])
+      m.get(a.parent_asset_code)!.push(a)
+    }
+    return m
+  }, [assets])
+
+  // Panel de análisis (solo lectura, agregados sobre todos los activos) ────────
+  const costByCategory = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const a of assets) {
+      const key = a.classification_name ?? 'Sin categoría'
+      m.set(key, (m.get(key) ?? 0) + Number(a.replacement_cost || 0))
+    }
+    return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8)
+  }, [assets])
+  const costByLocation = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const a of assets) {
+      const key = a.location_description ?? 'Sin ubicación'
+      m.set(key, (m.get(key) ?? 0) + Number(a.replacement_cost || 0))
+    }
+    return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8)
+  }, [assets])
+  const topRepairAssets = useMemo(() => {
+    return assets
+      .map(a => ({ asset: a, value: repairTotals.get(a.id) ?? 0 }))
+      .filter(x => x.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8)
+  }, [assets, repairTotals])
+  const criticalityDistribution = useMemo(() => {
+    return [1, 2, 3, 4, 5].map(level => ({ level, count: assets.filter(a => a.criticality === level).length }))
+  }, [assets])
 
   const totalReplacement = assets.reduce((s, a) => s + Number(a.replacement_cost || 0), 0)
   const totalRepairs = [...repairTotals.values()].reduce((s, v) => s + v, 0)
@@ -291,6 +356,11 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     setNewRepair({ date: todayIso(), description: '', material_cost: 0, labor_cost: 0 })
     setLoadingRepairs(true)
     getCriticalAssetRepairs(asset.id).then(setRepairs).finally(() => setLoadingRepairs(false))
+  }
+
+  function openDetailByCode(code: string) {
+    const asset = assetsByCode.get(code)
+    if (asset) openDetail(asset)
   }
 
   async function handleSave() {
@@ -420,7 +490,7 @@ function RegistryContent({ workerId }: { workerId?: number }) {
             : <div key={kpi.label}>{content}</div>
         })}
       </div>
-      {kpiFilter && (
+      {kpiFilter && activeTab === 'list' && (
         <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
           <span>Mostrando:</span>
           <span className="font-semibold text-gray-800 dark:text-white">
@@ -431,6 +501,101 @@ function RegistryContent({ workerId }: { workerId?: number }) {
         </div>
       )}
 
+      {/* Selector de pestaña */}
+      <div className="flex gap-1 border-b border-gray-200 dark:border-slate-700">
+        {[
+          { key: 'list' as const, label: 'Listado', icon: List },
+          { key: 'analytics' as const, label: 'Análisis', icon: BarChart3 },
+        ].map(t => {
+          const Icon = t.icon
+          const active = activeTab === t.key
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors',
+                active ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
+              )}
+            >
+              <Icon size={13} /> {t.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {activeTab === 'analytics' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Coste de reposición por categoría (top 8)</p>
+              {costByCategory.length === 0 ? <p className="text-xs text-gray-400 dark:text-slate-500">Sin datos.</p> : (
+                <div className="space-y-2">
+                  {costByCategory.map(c => {
+                    const max = costByCategory[0].value
+                    return <BarRow key={c.label} label={c.label} value={c.value} max={max} colorClass="bg-blue-500" formatValue={formatCurrency} />
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Coste de reposición por ubicación (top 8)</p>
+              {costByLocation.length === 0 ? <p className="text-xs text-gray-400 dark:text-slate-500">Sin datos.</p> : (
+                <div className="space-y-2">
+                  {costByLocation.map(c => {
+                    const max = costByLocation[0].value
+                    return <BarRow key={c.label} label={c.label} value={c.value} max={max} colorClass="bg-indigo-500" formatValue={formatCurrency} />
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <Wrench size={13} /> Activos con más coste de reparaciones (top 8)
+              </p>
+              {topRepairAssets.length === 0 ? (
+                <p className="text-xs text-gray-400 dark:text-slate-500">Todavía no hay reparaciones registradas.</p>
+              ) : (
+                <div className="space-y-2">
+                  {topRepairAssets.map(({ asset, value }) => {
+                    const max = topRepairAssets[0].value
+                    return (
+                      <BarRow
+                        key={asset.id}
+                        label={asset.description}
+                        value={value}
+                        max={max}
+                        colorClass="bg-amber-500"
+                        formatValue={formatCurrency}
+                        onClick={() => openDetail(asset)}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Distribución de criticidad</p>
+              <div className="space-y-2">
+                {criticalityDistribution.map(c => {
+                  const max = Math.max(...criticalityDistribution.map(x => x.count), 1)
+                  return <BarRow key={c.level} label={`Nivel ${c.level}`} value={c.count} max={max} colorClass={CRITICALITY_LEVEL_COLOR[c.level]} formatValue={v => String(v)} />
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+      <>
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
@@ -517,6 +682,8 @@ function RegistryContent({ workerId }: { workerId?: number }) {
         </table>
         {sorted.length === 0 && <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">Sin resultados para estos filtros.</div>}
       </div>
+      </>
+      )}
 
       {/* Dialog de detalle */}
       <Dialog open={!!selected} onClose={() => setSelected(null)} title={selected ? `${selected.asset_code} · ${selected.description}` : ''} size="xl">
@@ -586,8 +753,44 @@ function RegistryContent({ workerId }: { workerId?: number }) {
             </div>
             <div className="text-xs text-gray-400 dark:text-slate-500 border-t border-gray-100 dark:border-slate-700 pt-2">
               Ubicación: {selected.location_description ?? '—'} ({selected.location_code ?? '—'})
-              {selected.parent_asset_code && ` · Activo padre: ${selected.parent_asset_code}`}
             </div>
+
+            {/* Jerarquía padre-hijo (solo lectura, navegación) */}
+            {selected.parent_asset_code && (
+              <div className="text-xs">
+                <span className="text-gray-500 dark:text-slate-400 inline-flex items-center gap-1"><Link2 size={12} /> Activo padre:</span>{' '}
+                {assetsByCode.has(selected.parent_asset_code) ? (
+                  <button
+                    onClick={() => openDetailByCode(selected.parent_asset_code!)}
+                    className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                  >
+                    {assetsByCode.get(selected.parent_asset_code)!.description} ({selected.parent_asset_code})
+                  </button>
+                ) : (
+                  <span className="text-gray-600 dark:text-slate-300 font-mono">{selected.parent_asset_code}</span>
+                )}
+              </div>
+            )}
+            {(childrenByCode.get(selected.asset_code)?.length ?? 0) > 0 && (
+              <div className="text-xs space-y-1.5">
+                <span className="text-gray-500 dark:text-slate-400 inline-flex items-center gap-1">
+                  <GitBranch size={12} /> Sub-activos ({childrenByCode.get(selected.asset_code)!.length})
+                </span>
+                <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                  {childrenByCode.get(selected.asset_code)!.map(child => (
+                    <button
+                      key={child.id}
+                      onClick={() => openDetail(child)}
+                      className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg border border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-left"
+                    >
+                      <span className="text-gray-700 dark:text-slate-300 truncate">{child.description} <span className="text-gray-400 dark:text-slate-500 font-mono">({child.asset_code})</span></span>
+                      <span className="text-gray-500 dark:text-slate-400 font-medium shrink-0">{formatCurrency(child.replacement_cost)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? 'Guardando...' : 'Guardar cambios'}</Button>
 
             {/* Reparar vs cambiar */}
