@@ -1250,6 +1250,26 @@ export async function createCriticalAssetRepair(repair: Omit<CriticalAssetRepair
   return { ...data, created_by: data.created_by ?? undefined } as CriticalAssetRepair
 }
 
+export async function getAllCriticalAssetRepairs(): Promise<{ date: string; total_cost: number }[]> {
+  const { data, error } = await supabase
+    .from('critical_asset_repairs')
+    .select('date, total_cost')
+    .order('date', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as { date: string; total_cost: number }[]
+}
+
+export async function getCriticalAssetAuditLog(assetId: number): Promise<AuditLog[]> {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('*')
+    .eq('module', 'critical_assets')
+    .eq('entity_id', assetId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function getCriticalRegistryPassphraseHash(): Promise<string | null> {
   const { data, error } = await supabase
     .from('critical_registry_access')

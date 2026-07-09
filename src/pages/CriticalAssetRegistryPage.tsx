@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Boxes, Search, Lock, ShieldOff, FileDown, FileSpreadsheet,
   Wrench, AlertTriangle, Euro, Layers, CalendarClock, Clock,
-  ArrowUp, ArrowDown, ArrowUpDown, List, BarChart3, Link2, GitBranch,
+  ArrowUp, ArrowDown, ArrowUpDown, List, BarChart3, Link2, GitBranch, QrCode,
 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import QRCode from 'qrcode'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -15,9 +16,9 @@ import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 import {
   getCriticalAssets, upsertCriticalAsset, getCriticalAssetRepairs, createCriticalAssetRepair,
   getCriticalAssetRepairsSummary, getCriticalRegistryPassphraseHash, setCriticalRegistryPassphrase,
-  verifyCriticalRegistryPassphrase,
+  verifyCriticalRegistryPassphrase, getCriticalAssetAuditLog, createAuditLog, getAllCriticalAssetRepairs,
 } from '@/lib/supabase'
-import type { CriticalAsset, CriticalAssetRepair } from '@/types'
+import type { CriticalAsset, CriticalAssetRepair, AuditLog } from '@/types'
 import { cn, formatCurrency, todayIso } from '@/lib/utils'
 import { PageLoading } from '@/components/Skeleton'
 
@@ -65,6 +66,49 @@ function endOfLifeBadge(days: number | null) {
   if (days <= 180) return { label: `${days}d`, cls: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 font-bold' }
   if (days <= 365) return { label: `${days}d`, cls: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' }
   return { label: `${days}d`, cls: 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' }
+}
+
+function lastMonths(n: number) {
+  const now = new Date()
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (n - 1 - i), 1)
+    return {
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      label: d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }).replace('.', ''),
+    }
+  })
+}
+
+// ─── Diff de campos editables — para el registro de auditoría ────────────────
+
+const AUDITED_FIELDS: { key: keyof CriticalAsset; label: string; isMoney?: boolean; isDate?: boolean }[] = [
+  { key: 'description', label: 'Descripción' },
+  { key: 'classification_name', label: 'Categoría' },
+  { key: 'replacement_cost', label: 'Coste reposición', isMoney: true },
+  { key: 'criticality', label: 'Criticidad' },
+  { key: 'condition', label: 'Condición' },
+  { key: 'status', label: 'Estado' },
+  { key: 'manufacturer', label: 'Fabricante' },
+  { key: 'model', label: 'Modelo' },
+  { key: 'installation_date', label: 'Fecha instalación', isDate: true },
+  { key: 'end_date', label: 'Fecha fin de vida', isDate: true },
+]
+
+function diffAssetFields(before: CriticalAsset, after: Partial<CriticalAsset>): string[] {
+  const changes: string[] = []
+  for (const f of AUDITED_FIELDS) {
+    const oldVal = before[f.key]
+    const newVal = after[f.key]
+    if (newVal === undefined || String(oldVal ?? '') === String(newVal ?? '')) continue
+    const fmt = (v: unknown) => {
+      if (v === null || v === undefined || v === '') return '—'
+      if (f.isMoney) return formatCurrency(Number(v))
+      if (f.isDate) return formatDate(String(v))
+      return String(v)
+    }
+    changes.push(`${f.label}: ${fmt(oldVal)} → ${fmt(newVal)}`)
+  }
+  return changes
 }
 
 // ─── Panel de análisis: barras horizontales sin librería (mismo patrón que EdgeOpsDashboardPage) ──
@@ -211,15 +255,16 @@ export default function CriticalAssetRegistryPage() {
     return <PassphraseGate onUnlocked={() => setUnlocked(true)} />
   }
 
-  return <RegistryContent workerId={worker?.id} />
+  return <RegistryContent workerId={worker?.id} workerName={worker?.name} />
 }
 
 // ─── Contenido (una vez desbloqueado) ─────────────────────────────────────────
 
-function RegistryContent({ workerId }: { workerId?: number }) {
+function RegistryContent({ workerId, workerName }: { workerId?: number; workerName?: string }) {
   const toast = useToast()
   const { data: assets, setData: setAssets, loading } = useRealtimeTable('critical_assets', getCriticalAssets)
   const [repairTotals, setRepairTotals] = useState<Map<number, number>>(new Map())
+  const [allRepairs, setAllRepairs] = useState<{ date: string; total_cost: number }[]>([])
 
   const [search, setSearch] = useState('')
   const [filterClass, setFilterClass] = useState('')
@@ -237,6 +282,9 @@ function RegistryContent({ workerId }: { workerId?: number }) {
   const [loadingRepairs, setLoadingRepairs] = useState(false)
   const [newRepair, setNewRepair] = useState({ date: todayIso(), description: '', material_cost: 0, labor_cost: 0 })
   const [savingRepair, setSavingRepair] = useState(false)
+  const [assetAuditLog, setAssetAuditLog] = useState<AuditLog[]>([])
+  const [loadingAuditLog, setLoadingAuditLog] = useState(false)
+  const [generatingQr, setGeneratingQr] = useState(false)
 
   useEffect(() => {
     getCriticalAssetRepairsSummary().then(rows => {
@@ -244,6 +292,7 @@ function RegistryContent({ workerId }: { workerId?: number }) {
       for (const r of rows) m.set(r.asset_id, (m.get(r.asset_id) ?? 0) + Number(r.total_cost))
       setRepairTotals(m)
     })
+    getAllCriticalAssetRepairs().then(setAllRepairs)
   }, [])
 
   const classifications = useMemo(
@@ -266,6 +315,15 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     }
     return m
   }, [assets])
+
+  // Abrir directamente un activo si se llega por el enlace de un QR escaneado (?code=A-XXXX)
+  useEffect(() => {
+    if (loading) return
+    const code = new URLSearchParams(window.location.search).get('code')
+    if (!code) return
+    const asset = assets.find(a => a.asset_code === code)
+    if (asset) openDetail(asset)
+  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Panel de análisis (solo lectura, agregados sobre todos los activos) ────────
   const costByCategory = useMemo(() => {
@@ -294,6 +352,29 @@ function RegistryContent({ workerId }: { workerId?: number }) {
   const criticalityDistribution = useMemo(() => {
     return [1, 2, 3, 4, 5].map(level => ({ level, count: assets.filter(a => a.criticality === level).length }))
   }, [assets])
+  const eolBudgetBuckets = useMemo(() => {
+    const buckets = [
+      { key: '6m', label: 'Próximos 6 meses (o vencidos)', maxDays: 180 },
+      { key: '12m', label: 'De 6 a 12 meses', maxDays: 365 },
+      { key: '24m', label: 'De 12 a 24 meses', maxDays: 730 },
+    ]
+    let prevMax = -Infinity
+    return buckets.map(b => {
+      const inBucket = assets.filter(a => {
+        const d = daysUntil(a.end_date)
+        return d !== null && d <= b.maxDays && d > prevMax
+      })
+      prevMax = b.maxDays
+      return { label: b.label, count: inBucket.length, cost: inBucket.reduce((s, a) => s + Number(a.replacement_cost || 0), 0) }
+    })
+  }, [assets])
+  const monthlyRepairCosts = useMemo(() => {
+    const months = lastMonths(12)
+    return months.map(m => ({
+      ...m,
+      total: allRepairs.filter(r => r.date.startsWith(m.key)).reduce((s, r) => s + Number(r.total_cost), 0),
+    }))
+  }, [allRepairs])
 
   const totalReplacement = assets.reduce((s, a) => s + Number(a.replacement_cost || 0), 0)
   const totalRepairs = [...repairTotals.values()].reduce((s, v) => s + v, 0)
@@ -356,6 +437,8 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     setNewRepair({ date: todayIso(), description: '', material_cost: 0, labor_cost: 0 })
     setLoadingRepairs(true)
     getCriticalAssetRepairs(asset.id).then(setRepairs).finally(() => setLoadingRepairs(false))
+    setLoadingAuditLog(true)
+    getCriticalAssetAuditLog(asset.id).then(setAssetAuditLog).finally(() => setLoadingAuditLog(false))
   }
 
   function openDetailByCode(code: string) {
@@ -367,9 +450,26 @@ function RegistryContent({ workerId }: { workerId?: number }) {
     if (!selected) return
     setSaving(true)
     try {
+      const changes = diffAssetFields(selected, form)
       const saved = await upsertCriticalAsset({ ...form, id: selected.id })
       setAssets(prev => prev.map(a => a.id === saved.id ? saved : a))
       setSelected(saved)
+      if (changes.length > 0) {
+        createAuditLog({
+          user_id: workerId,
+          user_name: workerName,
+          action: 'critical_asset_updated',
+          module: 'critical_assets',
+          entity_type: 'critical_asset',
+          entity_id: saved.id,
+          description: `${saved.asset_code} — ${changes.join('; ')}`,
+        })
+        setAssetAuditLog(prev => [{
+          id: -Date.now(), user_id: workerId, user_name: workerName, action: 'critical_asset_updated',
+          module: 'critical_assets', entity_type: 'critical_asset', entity_id: saved.id,
+          description: changes.join('; '), severity: 'info', created_at: new Date().toISOString(),
+        }, ...prev])
+      }
       toast.success('Activo actualizado')
     } catch {
       toast.error('No se pudo guardar.')
@@ -392,6 +492,7 @@ function RegistryContent({ workerId }: { workerId?: number }) {
       })
       setRepairs(prev => [saved, ...prev])
       setRepairTotals(prev => new Map(prev).set(selected.id, (prev.get(selected.id) ?? 0) + saved.total_cost))
+      setAllRepairs(prev => [...prev, { date: saved.date, total_cost: saved.total_cost }])
       setNewRepair({ date: todayIso(), description: '', material_cost: 0, labor_cost: 0 })
       toast.success('Reparación registrada')
     } catch {
@@ -434,6 +535,31 @@ function RegistryContent({ workerId }: { workerId?: number }) {
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255] },
     })
     doc.save(`registro-activos-${todayIso()}.pdf`)
+  }
+
+  async function generateQrLabel(asset: CriticalAsset) {
+    setGeneratingQr(true)
+    try {
+      const url = `${window.location.origin}/asset-registry?code=${encodeURIComponent(asset.asset_code)}`
+      const qrDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 1 })
+      const doc = new jsPDF({ unit: 'mm', format: [80, 50] })
+      doc.addImage(qrDataUrl, 'PNG', 3, 3, 44, 44)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(11)
+      doc.text(asset.asset_code, 50, 12)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7.5)
+      const descLines = doc.splitTextToSize(asset.description, 27)
+      doc.text(descLines, 50, 19)
+      doc.setFontSize(6)
+      doc.setTextColor(130, 130, 130)
+      doc.text('Escanea para ver la ficha', 50, 46)
+      doc.save(`qr-${asset.asset_code}.pdf`)
+    } catch {
+      toast.error('No se pudo generar el código QR.')
+    } finally {
+      setGeneratingQr(false)
+    }
   }
 
   if (loading) return <PageLoading kpis={5} rows={6} />
@@ -593,6 +719,46 @@ function RegistryContent({ workerId }: { workerId?: number }) {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="lg:col-span-2">
+            <CardContent className="pt-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <CalendarClock size={13} /> Presupuesto necesario por vida útil próxima
+              </p>
+              <div className="space-y-2">
+                {eolBudgetBuckets.map((b, i) => {
+                  const max = Math.max(...eolBudgetBuckets.map(x => x.cost), 1)
+                  return <BarRow key={b.label} label={b.label} value={b.cost} max={max} colorClass={i === 0 ? 'bg-red-600' : i === 1 ? 'bg-orange-500' : 'bg-amber-500'} formatValue={formatCurrency} />
+                })}
+              </div>
+              <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-3">
+                {eolBudgetBuckets.reduce((s, b) => s + b.count, 0)} activo(s) en total dentro de los próximos 2 años · {formatCurrency(eolBudgetBuckets.reduce((s, b) => s + b.cost, 0))} de coste de reposición combinado
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardContent className="pt-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Evolución mensual del gasto en reparaciones (12 meses)</p>
+              {allRepairs.length === 0 ? (
+                <p className="text-xs text-gray-400 dark:text-slate-500">Todavía no hay reparaciones registradas.</p>
+              ) : (
+                <div className="flex items-end gap-2" style={{ height: 122 }}>
+                  {monthlyRepairCosts.map(m => {
+                    const maxTotal = Math.max(...monthlyRepairCosts.map(x => x.total), 1)
+                    const h = m.total > 0 ? Math.max((m.total / maxTotal) * 90, 6) : 2
+                    return (
+                      <div key={m.key} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
+                        {m.total > 0 && <span className="text-[9px] font-semibold text-gray-500 dark:text-slate-400 whitespace-nowrap">{formatCurrency(m.total)}</span>}
+                        <div className="w-full max-w-[28px] bg-amber-500 dark:bg-amber-600 rounded-t transition-all" style={{ height: h }} />
+                        <span className="text-[10px] text-gray-400 dark:text-slate-500 capitalize">{m.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       ) : (
       <>
@@ -689,6 +855,11 @@ function RegistryContent({ workerId }: { workerId?: number }) {
       <Dialog open={!!selected} onClose={() => setSelected(null)} title={selected ? `${selected.asset_code} · ${selected.description}` : ''} size="xl">
         {selected && (
           <div className="p-5 space-y-4">
+            <div className="flex justify-end -mt-1 -mb-1">
+              <Button size="sm" variant="outline" onClick={() => generateQrLabel(selected)} disabled={generatingQr}>
+                <QrCode size={14} /> {generatingQr ? 'Generando...' : 'Etiqueta QR'}
+              </Button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Descripción</label>
@@ -803,6 +974,27 @@ function RegistryContent({ workerId }: { workerId?: number }) {
                 {repairRatio >= 0.5 && ' — valora si compensa más cambiarlo que seguir reparándolo.'}
               </div>
             )}
+
+            {/* Historial de cambios (auditoría) */}
+            <div className="border-t border-gray-100 dark:border-slate-700 pt-4 space-y-2">
+              <p className={labelClass}>Historial de cambios</p>
+              {loadingAuditLog ? (
+                <p className="text-xs text-gray-400 dark:text-slate-500">Cargando...</p>
+              ) : assetAuditLog.length === 0 ? (
+                <p className="text-xs text-gray-400 dark:text-slate-500">Sin cambios registrados todavía.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                  {assetAuditLog.map(log => (
+                    <div key={log.id} className="text-[11px] border border-gray-100 dark:border-slate-700 rounded-lg px-2.5 py-1.5">
+                      <p className="text-gray-600 dark:text-slate-300">{log.description}</p>
+                      <p className="text-gray-400 dark:text-slate-500 mt-0.5">
+                        {log.user_name ?? 'Alguien'} · {new Date(log.created_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Historial de reparaciones */}
             <div className="border-t border-gray-100 dark:border-slate-700 pt-4 space-y-3">

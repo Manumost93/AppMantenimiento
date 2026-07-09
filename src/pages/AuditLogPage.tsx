@@ -22,8 +22,14 @@ const TABS: { key: 'all' | AuditSeverity; label: string }[] = [
 ]
 
 export default function AuditLogPage() {
-  const { data: logs, loading } = useRealtimeTable('audit_logs', getAuditLogs)
+  const { data: allLogs, loading } = useRealtimeTable('audit_logs', getAuditLogs)
   const [activeTab, setActiveTab] = useState<'all' | AuditSeverity>('all')
+
+  // Los cambios del Registro de Activos son de acceso restringido (solo quien
+  // tenga permiso a esa sección) — no se muestran en este Audit Log general,
+  // que es visible para cualquier administrador. Se consultan desde la propia
+  // ficha del activo en Registro de Activos.
+  const logs = allLogs.filter(l => l.module !== 'critical_assets')
 
   const filtered = activeTab === 'all' ? logs : logs.filter(l => l.severity === activeTab)
 
