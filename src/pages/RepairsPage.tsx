@@ -92,8 +92,10 @@ export default function RepairsPage() {
       setRepairs(prev => selected ? prev.map(r => r.id === selected.id ? withRelations : r) : [withRelations, ...prev])
       setShowDialog(false)
       toast.success(selected ? 'Reparación actualizada' : 'Reparación creada')
-    } catch {
-      toast.error('Error al guardar la reparación.')
+    } catch (e) {
+      console.error('Error guardando reparación:', e)
+      const msg = e instanceof Error ? e.message : ''
+      toast.error(msg ? `Error al guardar la reparación: ${msg}` : 'Error al guardar la reparación.')
     } finally {
       setSaving(false)
     }
