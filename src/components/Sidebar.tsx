@@ -3,7 +3,7 @@ import {
   Calendar, LayoutDashboard, User, Users, Truck, FolderOpen,
   Building2, Paintbrush2, UtensilsCrossed, Wrench,
   BarChart2, Settings, ChevronRight, Shield, ClipboardCheck, ShieldAlert, BookOpen, Trash2,
-  HardHat, Thermometer, Radar, History, Server, Activity, Gauge, Boxes
+  HardHat, Thermometer, Radar, History, Server, Activity, Gauge, Boxes, Cuboid
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -24,6 +24,7 @@ const navItems = [
   { path: '/edge-ops',  icon: Activity,           label: 'Dashboard EdgeOps',  section: 'critical', adminOnly: false },
   { path: '/edge-monitoring', icon: Gauge,        label: 'Monitorización',     section: 'critical', adminOnly: false },
   { path: '/asset-registry', icon: Boxes,         label: 'Registro de Activos', section: 'critical', adminOnly: false, restrictedOnly: true },
+  { path: '/building-3d', icon: Cuboid,           label: 'Modelo 3D Edificio', section: 'critical', adminOnly: false },
   { path: '/meetings',  icon: BookOpen,           label: 'Reuniones',          section: 'work',   adminOnly: false },
   { path: '/waste',     icon: Trash2,             label: 'Residuos',           section: 'work',   adminOnly: false },
   { path: '/team',      icon: Users,              label: 'Equipo',             section: 'manage', adminOnly: false },

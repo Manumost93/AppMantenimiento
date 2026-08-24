@@ -5,6 +5,7 @@ import type {
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
   AuditLog, EdgeAsset, EdgeAssetRepair, CriticalAsset, CriticalAssetRepair, CriticalAssetLite,
+  BuildingFloor, BuildingMarker,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -1379,4 +1380,100 @@ export async function setCriticalRegistryPassphrase(passphrase: string): Promise
 export async function verifyCriticalRegistryPassphrase(passphrase: string, hash: string): Promise<boolean> {
   const bcrypt = await import('bcryptjs')
   return bcrypt.compare(passphrase, hash)
+}
+
+// ─── Modelo 3D del edificio ────────────────────────────────────────────────
+// SQL: database/building_3d_schema.sql
+// Storage: Dashboard → Storage → New bucket "building-plans" (Public: ON)
+
+export async function getBuildingFloors(): Promise<BuildingFloor[]> {
+  const { data, error } = await supabase
+    .from('building_floors')
+    .select('*')
+    .order('floor_order')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function upsertBuildingFloor(floor: Partial<BuildingFloor>): Promise<BuildingFloor> {
+  const { created_at, ...payload } = floor as BuildingFloor & { created_at?: unknown }
+  const isNew = !floor.id
+  const { data, error } = await supabase
+    .from('building_floors')
+    .upsert({ ...payload, updated_at: new Date().toISOString() })
+    .select('*')
+    .single()
+  if (error) throw error
+  createAuditLog({
+    action: isNew ? 'building_floor_created' : 'building_floor_updated',
+    module: 'building_3d',
+    entity_type: 'building_floor',
+    entity_id: data.id,
+    description: `Planta ${isNew ? 'creada' : 'actualizada'}: ${data.name}`,
+  })
+  return data
+}
+
+export async function deleteBuildingFloor(id: number, name: string): Promise<void> {
+  const { error } = await supabase.from('building_floors').delete().eq('id', id)
+  if (error) throw error
+  createAuditLog({
+    action: 'building_floor_deleted',
+    module: 'building_3d',
+    entity_type: 'building_floor',
+    entity_id: id,
+    description: `Planta eliminada: ${name}`,
+    severity: 'warning',
+  })
+}
+
+export async function uploadBuildingPlanImage(file: File | Blob, path: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage
+      .from('building-plans')
+      .upload(path, file, { upsert: true })
+    if (error || !data) return null
+    const { data: { publicUrl } } = supabase.storage.from('building-plans').getPublicUrl(data.path)
+    return publicUrl
+  } catch { return null }
+}
+
+export async function getBuildingMarkers(floorId?: number): Promise<BuildingMarker[]> {
+  let query = supabase.from('building_markers').select('*')
+  if (floorId) query = query.eq('floor_id', floorId)
+  const { data, error } = await query.order('created_at')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function upsertBuildingMarker(marker: Partial<BuildingMarker>): Promise<BuildingMarker> {
+  const { created_at, ...payload } = marker as BuildingMarker & { created_at?: unknown }
+  const isNew = !marker.id
+  const { data, error } = await supabase
+    .from('building_markers')
+    .upsert(payload)
+    .select('*')
+    .single()
+  if (error) throw error
+  createAuditLog({
+    action: isNew ? 'building_marker_created' : 'building_marker_updated',
+    module: 'building_3d',
+    entity_type: 'building_marker',
+    entity_id: data.id,
+    description: `Marcador ${isNew ? 'creado' : 'actualizado'} en planta ${data.floor_id}`,
+  })
+  return data
+}
+
+export async function deleteBuildingMarker(id: number): Promise<void> {
+  const { error } = await supabase.from('building_markers').delete().eq('id', id)
+  if (error) throw error
+  createAuditLog({
+    action: 'building_marker_deleted',
+    module: 'building_3d',
+    entity_type: 'building_marker',
+    entity_id: id,
+    description: 'Marcador eliminado',
+    severity: 'warning',
+  })
 }

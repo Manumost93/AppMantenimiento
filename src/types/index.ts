@@ -534,3 +534,30 @@ export interface CriticalAssetRepair {
   created_by?: TeamMember
   created_at: string
 }
+
+// ─── Modelo 3D del edificio ────────────────────────────────────────────────
+
+export interface BuildingFloor {
+  id: number
+  name: string
+  floor_order: number
+  plan_image_url?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+// Un marcador enlaza SIEMPRE a exactamente uno de: critical_asset_id,
+// edge_asset_id, o label (nota libre) — reforzado por CHECK en BD.
+export interface BuildingMarker {
+  id: number
+  floor_id: number
+  critical_asset_id?: number
+  edge_asset_id?: number
+  label?: string
+  note_text?: string
+  pos_x: number
+  pos_y: number
+  created_by_id?: number
+  created_at: string
+}
