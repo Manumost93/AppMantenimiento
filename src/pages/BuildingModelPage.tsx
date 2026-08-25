@@ -150,15 +150,15 @@ export default function BuildingModelPage() {
       let plan_image_url = floorForm.plan_image_url
       if (floorFile) {
         const path = `${Date.now()}-${floorFile.name}`
-        const url = await uploadBuildingPlanImage(floorFile, path)
-        if (!url) { toast.error('No se pudo subir la imagen del plano'); setSavingFloor(false); return }
-        plan_image_url = url
+        plan_image_url = await uploadBuildingPlanImage(floorFile, path)
       }
       await upsertBuildingFloor({ ...floorForm, plan_image_url })
       toast.success('Planta guardada')
       setShowFloorDialog(false)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al guardar la planta')
+      console.error('Error guardando planta:', e)
+      const msg = e instanceof Error ? e.message : ''
+      toast.error(msg ? `Error al guardar la planta: ${msg}` : 'Error al guardar la planta.')
     } finally {
       setSavingFloor(false)
     }

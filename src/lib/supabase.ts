@@ -1427,15 +1427,13 @@ export async function deleteBuildingFloor(id: number, name: string): Promise<voi
   })
 }
 
-export async function uploadBuildingPlanImage(file: File | Blob, path: string): Promise<string | null> {
-  try {
-    const { data, error } = await supabase.storage
-      .from('building-plans')
-      .upload(path, file, { upsert: true })
-    if (error || !data) return null
-    const { data: { publicUrl } } = supabase.storage.from('building-plans').getPublicUrl(data.path)
-    return publicUrl
-  } catch { return null }
+export async function uploadBuildingPlanImage(file: File | Blob, path: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('building-plans')
+    .upload(path, file, { upsert: true })
+  if (error) throw error
+  const { data: { publicUrl } } = supabase.storage.from('building-plans').getPublicUrl(data.path)
+  return publicUrl
 }
 
 export async function getBuildingMarkers(floorId?: number): Promise<BuildingMarker[]> {
