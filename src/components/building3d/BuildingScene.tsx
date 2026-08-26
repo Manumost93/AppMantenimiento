@@ -15,6 +15,7 @@ declare module '@react-three/fiber' {
 
 export const FLOOR_HEIGHT = 3.2
 export const FLOOR_SIZE = 12
+const SLAB_THICKNESS = 0.15
 
 export type MarkerColor = { fill: string; ring: string }
 
@@ -117,6 +118,10 @@ function FloorGroup({ floor, markers, dimmed, markerColor, onMarkerClick, onFloo
           <PlaceholderSurface size={FLOOR_SIZE} dimmed={dimmed} />
         )}
       </mesh>
+      <mesh position={[0, 0, -SLAB_THICKNESS / 2]} raycast={() => null}>
+        <boxGeometry args={[FLOOR_SIZE, FLOOR_SIZE, SLAB_THICKNESS]} />
+        <meshStandardMaterial color="#334155" transparent opacity={dimmed ? 0.12 : 0.95} />
+      </mesh>
       {markers.map(m => (
         <Marker
           key={m.id}
@@ -129,12 +134,36 @@ function FloorGroup({ floor, markers, dimmed, markerColor, onMarkerClick, onFloo
   )
 }
 
+function BuildingShell({ floors }: { floors: BuildingFloor[] }) {
+  if (floors.length === 0) return null
+  const orders = floors.map(f => f.floor_order)
+  const bottomY = Math.min(...orders) * FLOOR_HEIGHT - FLOOR_HEIGHT * 0.5
+  const topY = Math.max(...orders) * FLOOR_HEIGHT + FLOOR_HEIGHT * 0.5
+  const height = topY - bottomY
+  const centerY = (topY + bottomY) / 2
+  const footprint = FLOOR_SIZE * 1.04
+
+  return (
+    <group position={[0, centerY, 0]}>
+      <mesh raycast={() => null}>
+        <boxGeometry args={[footprint, height, footprint]} />
+        <meshPhysicalMaterial color="#93c5fd" transparent opacity={0.05} roughness={0.15} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <lineSegments raycast={() => null}>
+        <edgesGeometry args={[new THREE.BoxGeometry(footprint, height, footprint)]} />
+        <lineBasicMaterial color="#60a5fa" transparent opacity={0.45} />
+      </lineSegments>
+    </group>
+  )
+}
+
 function SceneContent({ floors, markers, activeFloorId, markerColor, onMarkerClick, onFloorClick }: BuildingSceneProps) {
   return (
     <>
       <ambientLight intensity={0.7} />
       <directionalLight position={[8, 12, 6]} intensity={0.9} />
       <directionalLight position={[-8, 6, -6]} intensity={0.3} />
+      <BuildingShell floors={floors} />
       {floors.map(floor => (
         <FloorGroup
           key={floor.id}
