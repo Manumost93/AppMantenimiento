@@ -31,8 +31,8 @@ export default function BuildingModelPage() {
   const confirm = useConfirm()
   const { worker } = useAuth()
 
-  const { data: floors, loading: loadingFloors } = useRealtimeTable('building_floors', getBuildingFloors)
-  const { data: markers, loading: loadingMarkers } = useRealtimeTable('building_markers', getBuildingMarkers)
+  const { data: floors, setData: setFloors, loading: loadingFloors } = useRealtimeTable('building_floors', getBuildingFloors)
+  const { data: markers, setData: setMarkers, loading: loadingMarkers } = useRealtimeTable('building_markers', getBuildingMarkers)
   const [criticalAssets, setCriticalAssets] = useState<CriticalAssetLite[]>([])
   const [edgeAssets, setEdgeAssets] = useState<EdgeAsset[]>([])
 
@@ -114,7 +114,8 @@ export default function BuildingModelPage() {
     }
     setSavingMarker(true)
     try {
-      await upsertBuildingMarker(payload)
+      const saved = await upsertBuildingMarker(payload)
+      setMarkers(prev => [...prev, saved])
       toast.success('Marcador añadido')
       setNewMarkerTarget(null)
     } catch (e) {
@@ -130,6 +131,7 @@ export default function BuildingModelPage() {
     if (!ok) return
     try {
       await deleteBuildingMarker(selectedMarker.id)
+      setMarkers(prev => prev.filter(m => m.id !== selectedMarker.id))
       toast.success('Marcador eliminado')
       setSelectedMarker(null)
     } catch (e) {
@@ -152,7 +154,8 @@ export default function BuildingModelPage() {
         const path = `${Date.now()}-${floorFile.name}`
         plan_image_url = await uploadBuildingPlanImage(floorFile, path)
       }
-      await upsertBuildingFloor({ ...floorForm, plan_image_url })
+      const saved = await upsertBuildingFloor({ ...floorForm, plan_image_url })
+      setFloors(prev => floorForm.id ? prev.map(f => f.id === saved.id ? saved : f) : [...prev, saved])
       toast.success('Planta guardada')
       setShowFloorDialog(false)
     } catch (e) {
@@ -169,6 +172,8 @@ export default function BuildingModelPage() {
     if (!ok) return
     try {
       await deleteBuildingFloor(floor.id, floor.name)
+      setFloors(prev => prev.filter(f => f.id !== floor.id))
+      setMarkers(prev => prev.filter(m => m.floor_id !== floor.id))
       if (activeFloorId === floor.id) setActiveFloorId(null)
       toast.success('Planta eliminada')
     } catch (e) {
