@@ -1,7 +1,6 @@
 import { useRef } from 'react'
 import { Canvas, extend, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import * as THREE from 'three'
 import type { BuildingFloor, BuildingMarker } from '@/types'
 
 extend({ OrbitControls })
@@ -14,7 +13,12 @@ declare module '@react-three/fiber' {
 }
 
 export const FLOOR_HEIGHT = 3.2
-export const FLOOR_SIZE = 12
+// Nave rectangular alargada tipo "big box" (proporción aprox. de una tienda
+// IKEA vista desde el aire) — no es el contorno exacto de Alcorcón, es una
+// forma representativa que se puede afinar más adelante.
+export const BUILDING_WIDTH = 16
+export const BUILDING_DEPTH = 9
+const IKEA_BLUE = '#0051BA'
 
 export type MarkerColor = { fill: string; ring: string }
 
@@ -27,32 +31,6 @@ interface BuildingSceneProps {
   onFloorClick: (floorId: number, posX: number, posY: number) => void
 }
 
-// Silueta genérica aproximada de una nave tipo IKEA (nave principal + cuerpo
-// anexo más pequeño) — no es un trazado exacto del plano real, es una forma
-// representativa para que el modelo se lea como "un edificio" y no como una
-// caja lisa. Se puede afinar más adelante con la silueta real si hace falta.
-const FOOTPRINT_POINTS: [number, number][] = [
-  [-5.5, -3.5],
-  [-5.5, 4.5],
-  [5.5, 4.5],
-  [5.5, -0.5],
-  [0.5, -0.5],
-  [0.5, -3.5],
-]
-
-const VOLUME_GAP = 0.2
-const VOLUME_HEIGHT = FLOOR_HEIGHT - VOLUME_GAP
-
-const buildingFootprintGeometry = (() => {
-  const shape = new THREE.Shape()
-  shape.moveTo(FOOTPRINT_POINTS[0][0], FOOTPRINT_POINTS[0][1])
-  for (let i = 1; i < FOOTPRINT_POINTS.length; i++) shape.lineTo(FOOTPRINT_POINTS[i][0], FOOTPRINT_POINTS[i][1])
-  shape.closePath()
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: VOLUME_HEIGHT, bevelEnabled: false })
-  geo.rotateX(-Math.PI / 2)
-  return geo
-})()
-
 function Controls() {
   const { camera, gl } = useThree()
   const ref = useRef<OrbitControls>(null)
@@ -64,9 +42,35 @@ function Controls() {
       enableDamping
       dampingFactor={0.08}
       minDistance={4}
-      maxDistance={FLOOR_SIZE * 4}
+      maxDistance={Math.max(BUILDING_WIDTH, BUILDING_DEPTH) * 4}
       maxPolarAngle={Math.PI / 2.05}
     />
+  )
+}
+
+// El edificio se dibuja como UN único bloque (no una caja por planta) porque
+// por fuera una nave real no muestra las divisiones de planta — solo el
+// plano invisible de clics y los marcadores van por planta.
+function BuildingVolume({ floors, dimmed }: { floors: BuildingFloor[]; dimmed: boolean }) {
+  if (floors.length === 0) return null
+  const orders = floors.map(f => f.floor_order)
+  const bottomY = Math.min(...orders) * FLOOR_HEIGHT - FLOOR_HEIGHT * 0.5
+  const topY = Math.max(...orders) * FLOOR_HEIGHT + FLOOR_HEIGHT * 0.5
+  const height = topY - bottomY
+  const centerY = (topY + bottomY) / 2
+  const roofThickness = 0.25
+
+  return (
+    <group>
+      <mesh position={[0, centerY, 0]}>
+        <boxGeometry args={[BUILDING_WIDTH, height, BUILDING_DEPTH]} />
+        <meshStandardMaterial color={IKEA_BLUE} transparent opacity={dimmed ? 0.2 : 1} roughness={0.55} metalness={0.05} />
+      </mesh>
+      <mesh position={[0, topY + roofThickness / 2, 0]}>
+        <boxGeometry args={[BUILDING_WIDTH * 1.02, roofThickness, BUILDING_DEPTH * 1.02]} />
+        <meshStandardMaterial color="#cbd5e1" transparent opacity={dimmed ? 0.2 : 1} roughness={0.8} />
+      </mesh>
+    </group>
   )
 }
 
@@ -75,8 +79,8 @@ function Marker({ marker, color, onClick }: {
   color: MarkerColor
   onClick: (e: ThreeEvent<MouseEvent>) => void
 }) {
-  const x = (marker.pos_x - 0.5) * FLOOR_SIZE
-  const y = (marker.pos_y - 0.5) * FLOOR_SIZE
+  const x = (marker.pos_x - 0.5) * BUILDING_WIDTH
+  const y = (marker.pos_y - 0.5) * BUILDING_DEPTH
   return (
     <group position={[x, y, 0.35]} onClick={onClick}>
       <mesh>
@@ -91,7 +95,7 @@ function Marker({ marker, color, onClick }: {
   )
 }
 
-function FloorGroup({ floor, markers, dimmed, markerColor, onMarkerClick, onFloorClick }: {
+function FloorInteractionLayer({ floor, markers, dimmed, markerColor, onMarkerClick, onFloorClick }: {
   floor: BuildingFloor
   markers: BuildingMarker[]
   dimmed: boolean
@@ -106,32 +110,23 @@ function FloorGroup({ floor, markers, dimmed, markerColor, onMarkerClick, onFloo
   }
 
   return (
-    <>
-      <mesh
-        geometry={buildingFootprintGeometry}
-        position={[0, floor.floor_order * FLOOR_HEIGHT - VOLUME_HEIGHT, 0]}
-        raycast={() => null}
-      >
-        <meshStandardMaterial color="#94a3b8" transparent opacity={dimmed ? 0.15 : 0.92} roughness={0.6} />
+    <group
+      position={[0, floor.floor_order * FLOOR_HEIGHT, 0]}
+      rotation={[-Math.PI / 2, 0, 0]}
+    >
+      <mesh onClick={handleSurfaceClick} raycast={dimmed ? () => null : undefined}>
+        <planeGeometry args={[BUILDING_WIDTH, BUILDING_DEPTH]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      <group
-        position={[0, floor.floor_order * FLOOR_HEIGHT, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-      >
-        <mesh onClick={handleSurfaceClick} raycast={dimmed ? () => null : undefined}>
-          <planeGeometry args={[FLOOR_SIZE, FLOOR_SIZE]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
-        {markers.map(m => (
-          <Marker
-            key={m.id}
-            marker={m}
-            color={markerColor(m)}
-            onClick={e => { e.stopPropagation(); onMarkerClick(m) }}
-          />
-        ))}
-      </group>
-    </>
+      {markers.map(m => (
+        <Marker
+          key={m.id}
+          marker={m}
+          color={markerColor(m)}
+          onClick={e => { e.stopPropagation(); onMarkerClick(m) }}
+        />
+      ))}
+    </group>
   )
 }
 
@@ -141,8 +136,9 @@ function SceneContent({ floors, markers, activeFloorId, markerColor, onMarkerCli
       <ambientLight intensity={0.7} />
       <directionalLight position={[8, 12, 6]} intensity={0.9} />
       <directionalLight position={[-8, 6, -6]} intensity={0.3} />
+      <BuildingVolume floors={floors} dimmed={activeFloorId !== null} />
       {floors.map(floor => (
-        <FloorGroup
+        <FloorInteractionLayer
           key={floor.id}
           floor={floor}
           markers={markers.filter(m => m.floor_id === floor.id)}
@@ -159,11 +155,11 @@ function SceneContent({ floors, markers, activeFloorId, markerColor, onMarkerCli
 
 export default function BuildingScene(props: BuildingSceneProps) {
   const floorCount = Math.max(props.floors.length, 1)
-  const camY = FLOOR_HEIGHT * floorCount * 0.6 + FLOOR_SIZE * 0.25
+  const camY = FLOOR_HEIGHT * floorCount * 0.6 + BUILDING_DEPTH * 0.4
 
   return (
     <Canvas
-      camera={{ position: [FLOOR_SIZE * 0.85, camY, FLOOR_SIZE * 0.85], fov: 50 }}
+      camera={{ position: [BUILDING_WIDTH * 0.7, camY, BUILDING_DEPTH * 1.6], fov: 50 }}
       gl={{ antialias: true }}
       style={{ background: 'transparent' }}
     >
