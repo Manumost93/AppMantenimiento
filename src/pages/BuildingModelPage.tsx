@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Boxes, Plus, Trash2, Layers, StickyNote } from 'lucide-react'
+import { Boxes, Plus, Trash2, Layers, StickyNote, Image as ImageIcon } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -60,6 +60,8 @@ export default function BuildingModelPage() {
   const [linkedRecords, setLinkedRecords] = useState<LinkedAssetRecord[]>([])
   const [edgeRepairs, setEdgeRepairs] = useState<EdgeAssetRepair[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
+
+  const [viewingPlanFloor, setViewingPlanFloor] = useState<BuildingFloor | null>(null)
 
   function markerColor(marker: BuildingMarker) {
     if (marker.critical_asset_id) return { fill: '#2563EB', ring: '#1D4ED8' }
@@ -241,6 +243,11 @@ export default function BuildingModelPage() {
                 >
                   {f.name}
                 </button>
+                {f.plan_image_url && (
+                  <button onClick={() => setViewingPlanFloor(f)} className="ml-1 p-1 text-gray-300 hover:text-blue-500" title="Ver plano original">
+                    <ImageIcon size={12} />
+                  </button>
+                )}
                 <button onClick={() => handleDeleteFloor(f)} className="ml-1 p-1 text-gray-300 hover:text-red-500" title="Eliminar planta">
                   <Trash2 size={12} />
                 </button>
@@ -419,6 +426,14 @@ export default function BuildingModelPage() {
             <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-slate-700">
               <Button variant="danger" size="sm" onClick={handleDeleteMarker}><Trash2 size={14} /> Eliminar marcador</Button>
             </div>
+          </div>
+        )}
+      </Dialog>
+
+      <Dialog open={!!viewingPlanFloor} onClose={() => setViewingPlanFloor(null)} title={viewingPlanFloor?.name} size="xl">
+        {viewingPlanFloor?.plan_image_url && (
+          <div className="p-3">
+            <img src={viewingPlanFloor.plan_image_url} alt={viewingPlanFloor.name} className="w-full h-auto rounded-lg" />
           </div>
         )}
       </Dialog>

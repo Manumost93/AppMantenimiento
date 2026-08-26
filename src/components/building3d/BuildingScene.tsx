@@ -1,5 +1,5 @@
-import { Suspense, useEffect, useRef } from 'react'
-import { Canvas, extend, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber'
+import { useRef } from 'react'
+import { Canvas, extend, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import * as THREE from 'three'
 import type { BuildingFloor, BuildingMarker } from '@/types'
@@ -15,7 +15,6 @@ declare module '@react-three/fiber' {
 
 export const FLOOR_HEIGHT = 3.2
 export const FLOOR_SIZE = 12
-const SLAB_THICKNESS = 0.15
 
 export type MarkerColor = { fill: string; ring: string }
 
@@ -27,6 +26,32 @@ interface BuildingSceneProps {
   onMarkerClick: (marker: BuildingMarker) => void
   onFloorClick: (floorId: number, posX: number, posY: number) => void
 }
+
+// Silueta genérica aproximada de una nave tipo IKEA (nave principal + cuerpo
+// anexo más pequeño) — no es un trazado exacto del plano real, es una forma
+// representativa para que el modelo se lea como "un edificio" y no como una
+// caja lisa. Se puede afinar más adelante con la silueta real si hace falta.
+const FOOTPRINT_POINTS: [number, number][] = [
+  [-5.5, -3.5],
+  [-5.5, 4.5],
+  [5.5, 4.5],
+  [5.5, -0.5],
+  [0.5, -0.5],
+  [0.5, -3.5],
+]
+
+const VOLUME_GAP = 0.2
+const VOLUME_HEIGHT = FLOOR_HEIGHT - VOLUME_GAP
+
+const buildingFootprintGeometry = (() => {
+  const shape = new THREE.Shape()
+  shape.moveTo(FOOTPRINT_POINTS[0][0], FOOTPRINT_POINTS[0][1])
+  for (let i = 1; i < FOOTPRINT_POINTS.length; i++) shape.lineTo(FOOTPRINT_POINTS[i][0], FOOTPRINT_POINTS[i][1])
+  shape.closePath()
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: VOLUME_HEIGHT, bevelEnabled: false })
+  geo.rotateX(-Math.PI / 2)
+  return geo
+})()
 
 function Controls() {
   const { camera, gl } = useThree()
@@ -41,29 +66,6 @@ function Controls() {
       minDistance={4}
       maxDistance={FLOOR_SIZE * 4}
       maxPolarAngle={Math.PI / 2.05}
-    />
-  )
-}
-
-function TexturedSurface({ url, size, dimmed }: { url: string; size: number; dimmed: boolean }) {
-  const texture = useLoader(THREE.TextureLoader, url)
-  return (
-    <meshStandardMaterial
-      map={texture}
-      transparent
-      opacity={dimmed ? 0.15 : 1}
-      side={THREE.DoubleSide}
-    />
-  )
-}
-
-function PlaceholderSurface({ dimmed }: { size: number; dimmed: boolean }) {
-  return (
-    <meshStandardMaterial
-      color="#cbd5e1"
-      transparent
-      opacity={dimmed ? 0.12 : 0.85}
-      side={THREE.DoubleSide}
     />
   )
 }
@@ -104,56 +106,32 @@ function FloorGroup({ floor, markers, dimmed, markerColor, onMarkerClick, onFloo
   }
 
   return (
-    <group
-      position={[0, floor.floor_order * FLOOR_HEIGHT, 0]}
-      rotation={[-Math.PI / 2, 0, 0]}
-    >
-      <mesh onClick={handleSurfaceClick} raycast={dimmed ? () => null : undefined}>
-        <planeGeometry args={[FLOOR_SIZE, FLOOR_SIZE]} />
-        {floor.plan_image_url ? (
-          <Suspense fallback={<PlaceholderSurface size={FLOOR_SIZE} dimmed={dimmed} />}>
-            <TexturedSurface url={floor.plan_image_url} size={FLOOR_SIZE} dimmed={dimmed} />
-          </Suspense>
-        ) : (
-          <PlaceholderSurface size={FLOOR_SIZE} dimmed={dimmed} />
-        )}
+    <>
+      <mesh
+        geometry={buildingFootprintGeometry}
+        position={[0, floor.floor_order * FLOOR_HEIGHT - VOLUME_HEIGHT, 0]}
+        raycast={() => null}
+      >
+        <meshStandardMaterial color="#94a3b8" transparent opacity={dimmed ? 0.15 : 0.92} roughness={0.6} />
       </mesh>
-      <mesh position={[0, 0, -SLAB_THICKNESS / 2]} raycast={() => null}>
-        <boxGeometry args={[FLOOR_SIZE, FLOOR_SIZE, SLAB_THICKNESS]} />
-        <meshStandardMaterial color="#334155" transparent opacity={dimmed ? 0.12 : 0.95} />
-      </mesh>
-      {markers.map(m => (
-        <Marker
-          key={m.id}
-          marker={m}
-          color={markerColor(m)}
-          onClick={e => { e.stopPropagation(); onMarkerClick(m) }}
-        />
-      ))}
-    </group>
-  )
-}
-
-function BuildingShell({ floors }: { floors: BuildingFloor[] }) {
-  if (floors.length === 0) return null
-  const orders = floors.map(f => f.floor_order)
-  const bottomY = Math.min(...orders) * FLOOR_HEIGHT - FLOOR_HEIGHT * 0.5
-  const topY = Math.max(...orders) * FLOOR_HEIGHT + FLOOR_HEIGHT * 0.5
-  const height = topY - bottomY
-  const centerY = (topY + bottomY) / 2
-  const footprint = FLOOR_SIZE * 1.04
-
-  return (
-    <group position={[0, centerY, 0]}>
-      <mesh raycast={() => null}>
-        <boxGeometry args={[footprint, height, footprint]} />
-        <meshPhysicalMaterial color="#93c5fd" transparent opacity={0.05} roughness={0.15} side={THREE.DoubleSide} depthWrite={false} />
-      </mesh>
-      <lineSegments raycast={() => null}>
-        <edgesGeometry args={[new THREE.BoxGeometry(footprint, height, footprint)]} />
-        <lineBasicMaterial color="#60a5fa" transparent opacity={0.45} />
-      </lineSegments>
-    </group>
+      <group
+        position={[0, floor.floor_order * FLOOR_HEIGHT, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <mesh onClick={handleSurfaceClick} raycast={dimmed ? () => null : undefined}>
+          <planeGeometry args={[FLOOR_SIZE, FLOOR_SIZE]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+        {markers.map(m => (
+          <Marker
+            key={m.id}
+            marker={m}
+            color={markerColor(m)}
+            onClick={e => { e.stopPropagation(); onMarkerClick(m) }}
+          />
+        ))}
+      </group>
+    </>
   )
 }
 
@@ -163,7 +141,6 @@ function SceneContent({ floors, markers, activeFloorId, markerColor, onMarkerCli
       <ambientLight intensity={0.7} />
       <directionalLight position={[8, 12, 6]} intensity={0.9} />
       <directionalLight position={[-8, 6, -6]} intensity={0.3} />
-      <BuildingShell floors={floors} />
       {floors.map(floor => (
         <FloorGroup
           key={floor.id}
