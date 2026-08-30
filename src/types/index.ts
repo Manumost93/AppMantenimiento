@@ -561,3 +561,40 @@ export interface BuildingMarker {
   created_by_id?: number
   created_at: string
 }
+
+// ─── Almacenes Mantenimiento ───────────────────────────────────────────────
+
+export interface Warehouse {
+  id: number
+  name: string
+  location?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface WarehouseSection {
+  id: number
+  warehouse_id: number
+  name: string
+  photos: string[]
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+// quantity + unit en vez de un "modo de conteo": lo mismo sirve para
+// unidades exactas (150, "uds") que para mercancía que solo se puede
+// controlar por palet (3, "palets").
+export interface WarehouseItem {
+  id: number
+  section_id: number
+  name: string
+  quantity: number
+  unit: string
+  notes?: string
+  photos: string[]
+  created_by_id?: number
+  created_at: string
+  updated_at: string
+}

@@ -3,7 +3,7 @@ import {
   Calendar, LayoutDashboard, User, Users, Truck, FolderOpen,
   Building2, Paintbrush2, UtensilsCrossed, Wrench,
   BarChart2, Settings, ChevronRight, Shield, ClipboardCheck, ShieldAlert, BookOpen, Trash2,
-  HardHat, Thermometer, Radar, History, Server, Activity, Gauge, Boxes, Cuboid
+  HardHat, Thermometer, Radar, History, Server, Activity, Gauge, Boxes, Cuboid, Warehouse
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -14,6 +14,7 @@ const navItems = [
   { path: '/my-area',   icon: User,               label: 'Mi Área Personal',   section: 'main',   adminOnly: false },
   { path: '/repairs',   icon: Wrench,             label: 'Reparaciones',       section: 'work',   adminOnly: false },
   { path: '/rondas',    icon: ClipboardCheck,     label: 'Rondas Apertura/Cierre', section: 'work', adminOnly: false },
+  { path: '/warehouses', icon: Warehouse,         label: 'Almacenes Mantenimiento', section: 'work', adminOnly: false },
   { path: '/security',  icon: ShieldAlert,        label: 'Seguridad',          section: 'areas',  adminOnly: false },
   { path: '/kone',      icon: Building2,          label: 'KONE / Ascensores',  section: 'areas',  adminOnly: false },
   { path: '/comin-ion', icon: Paintbrush2,        label: 'COMIN / IOM',        section: 'areas',  adminOnly: false },

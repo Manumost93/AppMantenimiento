@@ -9,6 +9,7 @@ interface Props {
   prefix?: string
   readOnly?: boolean
   maxPhotos?: number
+  uploadFn?: (blob: Blob, path: string) => Promise<string | null>
 }
 
 async function compressToJpeg(file: File, maxPx = 1920, quality = 0.82): Promise<Blob> {
@@ -32,7 +33,7 @@ async function compressToJpeg(file: File, maxPx = 1920, quality = 0.82): Promise
   })
 }
 
-export default function PhotoUpload({ photos, onChange, prefix = 'photo-', readOnly = false, maxPhotos = 8 }: Props) {
+export default function PhotoUpload({ photos, onChange, prefix = 'photo-', readOnly = false, maxPhotos = 8, uploadFn = uploadRepairPhoto }: Props) {
   const [uploading, setUploading] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -44,20 +45,14 @@ export default function PhotoUpload({ photos, onChange, prefix = 'photo-', readO
     try {
       const blob = await compressToJpeg(file)
       const path = `${prefix}${Date.now()}.jpg`
-      const url = await uploadRepairPhoto(blob, path)
+      const url = await uploadFn(blob, path)
       if (url) {
         onChange([...photos, url])
       } else {
-        alert(
-          'No se pudo subir la foto.\n\n' +
-          'Verifica en Supabase:\n' +
-          '1. Storage → bucket "repair-photos" existe y es público\n' +
-          '2. La columna "photos" existe en general_repairs y cbre_jobs\n' +
-          '   (Ver SQL en supabase.ts → uploadRepairPhoto)'
-        )
+        alert('No se pudo subir la foto. Comprueba que el bucket de Storage existe y es público.')
       }
-    } catch {
-      alert('Error al procesar la foto.')
+    } catch (e) {
+      alert(`Error al procesar la foto${e instanceof Error ? `: ${e.message}` : '.'}`)
     } finally {
       setUploading(false)
       if (cameraRef.current) cameraRef.current.value = ''

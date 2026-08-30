@@ -5,7 +5,7 @@ import type {
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
   AuditLog, EdgeAsset, EdgeAssetRepair, CriticalAsset, CriticalAssetRepair, CriticalAssetLite,
-  BuildingFloor, BuildingMarker,
+  BuildingFloor, BuildingMarker, Warehouse, WarehouseSection, WarehouseItem,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -1474,4 +1474,131 @@ export async function deleteBuildingMarker(id: number): Promise<void> {
     description: 'Marcador eliminado',
     severity: 'warning',
   })
+}
+
+// ─── Almacenes Mantenimiento ───────────────────────────────────────────────
+// SQL: database/warehouses_schema.sql
+// Storage: Dashboard → Storage → New bucket "warehouse-photos" (Public: ON)
+
+export async function getWarehouses(): Promise<Warehouse[]> {
+  const { data, error } = await supabase.from('warehouses').select('*').order('name')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function upsertWarehouse(warehouse: Partial<Warehouse>): Promise<Warehouse> {
+  const { created_at, ...payload } = warehouse as Warehouse & { created_at?: unknown }
+  const isNew = !warehouse.id
+  const { data, error } = await supabase
+    .from('warehouses')
+    .upsert({ ...payload, updated_at: new Date().toISOString() })
+    .select('*')
+    .single()
+  if (error) throw error
+  createAuditLog({
+    action: isNew ? 'warehouse_created' : 'warehouse_updated',
+    module: 'warehouses',
+    entity_type: 'warehouse',
+    entity_id: data.id,
+    description: `Almacén ${isNew ? 'creado' : 'actualizado'}: ${data.name}`,
+  })
+  return data
+}
+
+export async function deleteWarehouse(id: number, name: string): Promise<void> {
+  const { error } = await supabase.from('warehouses').delete().eq('id', id)
+  if (error) throw error
+  createAuditLog({
+    action: 'warehouse_deleted',
+    module: 'warehouses',
+    entity_type: 'warehouse',
+    entity_id: id,
+    description: `Almacén eliminado: ${name}`,
+    severity: 'warning',
+  })
+}
+
+export async function getWarehouseSections(): Promise<WarehouseSection[]> {
+  const { data, error } = await supabase.from('warehouse_sections').select('*').order('name')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function upsertWarehouseSection(section: Partial<WarehouseSection>): Promise<WarehouseSection> {
+  const { created_at, ...payload } = section as WarehouseSection & { created_at?: unknown }
+  const isNew = !section.id
+  const { data, error } = await supabase
+    .from('warehouse_sections')
+    .upsert({ ...payload, updated_at: new Date().toISOString() })
+    .select('*')
+    .single()
+  if (error) throw error
+  createAuditLog({
+    action: isNew ? 'warehouse_section_created' : 'warehouse_section_updated',
+    module: 'warehouses',
+    entity_type: 'warehouse_section',
+    entity_id: data.id,
+    description: `Sección ${isNew ? 'creada' : 'actualizada'}: ${data.name}`,
+  })
+  return data
+}
+
+export async function deleteWarehouseSection(id: number, name: string): Promise<void> {
+  const { error } = await supabase.from('warehouse_sections').delete().eq('id', id)
+  if (error) throw error
+  createAuditLog({
+    action: 'warehouse_section_deleted',
+    module: 'warehouses',
+    entity_type: 'warehouse_section',
+    entity_id: id,
+    description: `Sección eliminada: ${name}`,
+    severity: 'warning',
+  })
+}
+
+export async function getWarehouseItems(): Promise<WarehouseItem[]> {
+  const { data, error } = await supabase.from('warehouse_items').select('*').order('name')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function upsertWarehouseItem(item: Partial<WarehouseItem>): Promise<WarehouseItem> {
+  const { created_at, ...payload } = item as WarehouseItem & { created_at?: unknown }
+  const isNew = !item.id
+  const { data, error } = await supabase
+    .from('warehouse_items')
+    .upsert({ ...payload, updated_at: new Date().toISOString() })
+    .select('*')
+    .single()
+  if (error) throw error
+  createAuditLog({
+    action: isNew ? 'warehouse_item_created' : 'warehouse_item_updated',
+    module: 'warehouses',
+    entity_type: 'warehouse_item',
+    entity_id: data.id,
+    description: `Artículo ${isNew ? 'creado' : 'actualizado'}: ${data.name} (${data.quantity} ${data.unit})`,
+  })
+  return data
+}
+
+export async function deleteWarehouseItem(id: number, name: string): Promise<void> {
+  const { error } = await supabase.from('warehouse_items').delete().eq('id', id)
+  if (error) throw error
+  createAuditLog({
+    action: 'warehouse_item_deleted',
+    module: 'warehouses',
+    entity_type: 'warehouse_item',
+    entity_id: id,
+    description: `Artículo eliminado: ${name}`,
+    severity: 'warning',
+  })
+}
+
+export async function uploadWarehousePhoto(blob: Blob, path: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('warehouse-photos')
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: false })
+  if (error) throw error
+  const { data: { publicUrl } } = supabase.storage.from('warehouse-photos').getPublicUrl(data.path)
+  return publicUrl
 }
