@@ -573,12 +573,19 @@ export interface Warehouse {
   updated_at: string
 }
 
+// pos_x/pos_y/width/height: rectángulo de la sección dentro del plano del
+// almacén, como fracción 0-1 (independiente de la resolución de pantalla).
+// Null hasta que se dibuja en el plano.
 export interface WarehouseSection {
   id: number
   warehouse_id: number
   name: string
   photos: string[]
   notes?: string
+  pos_x?: number
+  pos_y?: number
+  width?: number
+  height?: number
   created_at: string
   updated_at: string
 }

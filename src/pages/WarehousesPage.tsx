@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Warehouse as WarehouseIcon, Plus, Trash2, Edit2, Search, Package, ArrowLeft } from 'lucide-react'
+import { Warehouse as WarehouseIcon, Plus, Trash2, Edit2, Search, Package, ArrowLeft, PenLine, X } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -14,6 +14,7 @@ import {
 import type { Warehouse, WarehouseSection, WarehouseItem } from '@/types'
 import { PageLoading } from '@/components/Skeleton'
 import PhotoUpload from '@/components/PhotoUpload'
+import WarehouseFloorPlan from '@/components/WarehouseFloorPlan'
 import { cn } from '@/lib/utils'
 
 const inputClass = 'w-full text-sm border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-800 dark:text-slate-200'
@@ -44,6 +45,9 @@ export default function WarehousesPage() {
   const [savingSection, setSavingSection] = useState(false)
 
   const [viewingSection, setViewingSection] = useState<WarehouseSection | null>(null)
+  const [pendingNewSection, setPendingNewSection] = useState<{ name: string; notes?: string } | null>(null)
+  const [drawSectionId, setDrawSectionId] = useState<number | null>(null)
+  const drawMode = pendingNewSection !== null || drawSectionId !== null
 
   const [showItemDialog, setShowItemDialog] = useState(false)
   const [editingItem, setEditingItem] = useState<WarehouseItem | null>(null)
@@ -91,18 +95,53 @@ export default function WarehousesPage() {
     setShowSectionDialog(true)
   }
 
-  async function handleSaveSection() {
+  function handleStartDrawSection() {
     if (!sectionForm.name?.trim()) { toast.error('Ponle un nombre a la sección'); return }
-    setSavingSection(true)
-    try {
-      const saved = await upsertWarehouseSection({ ...sectionForm, photos: sectionForm.photos ?? [] })
-      setSections(prev => sectionForm.id ? prev.map(s => s.id === saved.id ? saved : s) : [...prev, saved])
-      toast.success('Sección guardada')
-      setShowSectionDialog(false)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al guardar la sección')
-    } finally {
-      setSavingSection(false)
+    setShowSectionDialog(false)
+    setPendingNewSection({ name: sectionForm.name.trim(), notes: sectionForm.notes })
+  }
+
+  function startRedrawSection(section: WarehouseSection) {
+    setViewingSection(null)
+    setDrawSectionId(section.id)
+  }
+
+  function cancelDraw() {
+    setPendingNewSection(null)
+    setDrawSectionId(null)
+  }
+
+  async function handleFloorPlanDraw(rect: { pos_x: number; pos_y: number; width: number; height: number }) {
+    if (pendingNewSection && activeWarehouseId) {
+      setSavingSection(true)
+      try {
+        const saved = await upsertWarehouseSection({
+          warehouse_id: activeWarehouseId,
+          name: pendingNewSection.name,
+          notes: pendingNewSection.notes,
+          photos: [],
+          ...rect,
+        })
+        setSections(prev => [...prev, saved])
+        toast.success('Sección creada')
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Error al crear la sección')
+      } finally {
+        setSavingSection(false)
+        setPendingNewSection(null)
+      }
+    } else if (drawSectionId) {
+      const existing = sections.find(s => s.id === drawSectionId)
+      if (!existing) { setDrawSectionId(null); return }
+      try {
+        const saved = await upsertWarehouseSection({ ...existing, ...rect })
+        setSections(prev => prev.map(s => s.id === saved.id ? saved : s))
+        toast.success('Posición actualizada')
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Error al actualizar la posición')
+      } finally {
+        setDrawSectionId(null)
+      }
     }
   }
 
@@ -266,44 +305,34 @@ export default function WarehousesPage() {
 
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500 dark:text-slate-400">{activeSections.length} sección(es)</p>
-            <Button size="sm" variant="outline" onClick={openNewSection}><Plus size={14} /> Añadir sección</Button>
+            {drawMode ? (
+              <Button size="sm" variant="outline" onClick={cancelDraw}><X size={14} /> Cancelar dibujo</Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={openNewSection}><Plus size={14} /> Añadir sección</Button>
+            )}
           </div>
 
-          {activeSections.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-8 text-sm text-gray-400 dark:text-slate-500">
-                Este almacén todavía no tiene secciones.
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {activeSections.map(s => {
-                const sectionItems = items.filter(i => i.section_id === s.id)
-                return (
-                  <Card key={s.id} className="overflow-hidden cursor-pointer" onClick={() => setViewingSection(s)}>
-                    <div className="h-28 bg-gray-100 dark:bg-slate-700 flex items-center justify-center overflow-hidden">
-                      {s.photos[0] ? (
-                        <img src={s.photos[0]} alt={s.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <Package size={28} className="text-gray-300 dark:text-slate-500" />
-                      )}
-                    </div>
-                    <CardContent className="flex items-center justify-between">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 dark:text-slate-100 truncate">{s.name}</p>
-                        <p className="text-xs text-gray-400 dark:text-slate-500">{sectionItems.length} artículo(s)</p>
-                      </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleDeleteSection(s) }}
-                        className="p-1.5 text-gray-300 hover:text-red-500 shrink-0"
-                        title="Eliminar sección"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </CardContent>
-                  </Card>
-                )
-              })}
+          <WarehouseFloorPlan
+            sections={activeSections}
+            drawMode={drawMode}
+            onDrawComplete={handleFloorPlanDraw}
+            onSectionClick={setViewingSection}
+          />
+
+          {activeSections.some(s => s.pos_x == null) && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Secciones sin ubicar en el plano</p>
+              {activeSections.filter(s => s.pos_x == null).map(s => (
+                <div key={s.id} className="flex items-center justify-between gap-2 border border-gray-100 dark:border-slate-700 rounded-lg px-3 py-2">
+                  <span className="text-sm text-gray-700 dark:text-slate-200">{s.name}</span>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="outline" onClick={() => startRedrawSection(s)}><PenLine size={13} /> Dibujar</Button>
+                    <button onClick={() => handleDeleteSection(s)} className="p-1.5 text-gray-300 hover:text-red-500" title="Eliminar sección">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </>
@@ -340,9 +369,10 @@ export default function WarehousesPage() {
             <label className={labelClass}>Notas</label>
             <textarea className={inputClass} rows={2} value={sectionForm.notes || ''} onChange={e => setSectionForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
+          <p className="text-[11px] text-gray-400 dark:text-slate-500">Después de guardar el nombre, dibuja el rectángulo de la sección directamente sobre el plano del almacén.</p>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setShowSectionDialog(false)}>Cancelar</Button>
-            <Button size="sm" onClick={handleSaveSection} disabled={savingSection}>{savingSection ? 'Guardando...' : 'Guardar'}</Button>
+            <Button size="sm" onClick={handleStartDrawSection}><PenLine size={14} /> Continuar y dibujar</Button>
           </div>
         </div>
       </Dialog>
@@ -350,6 +380,10 @@ export default function WarehousesPage() {
       <Dialog open={!!viewingSection} onClose={() => setViewingSection(null)} title={viewingSection?.name} size="lg">
         {viewingSection && (
           <div className="p-5 space-y-4">
+            <div className="flex justify-end gap-2 -mt-2">
+              <Button size="sm" variant="outline" onClick={() => startRedrawSection(viewingSection)}><PenLine size={13} /> Redibujar en el plano</Button>
+              <Button size="sm" variant="danger" onClick={() => handleDeleteSection(viewingSection)}><Trash2 size={13} /> Eliminar sección</Button>
+            </div>
             <div>
               <label className={labelClass}>Fotos de la sección</label>
               <PhotoUpload
