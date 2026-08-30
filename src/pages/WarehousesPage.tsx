@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Warehouse as WarehouseIcon, Plus, Trash2, Edit2, Search, Package, ArrowLeft, PenLine, X } from 'lucide-react'
+import { Warehouse as WarehouseIcon, Plus, Trash2, Edit2, Search, Package, ArrowLeft, PenLine, X, FileSpreadsheet } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -15,7 +15,7 @@ import type { Warehouse, WarehouseSection, WarehouseItem } from '@/types'
 import { PageLoading } from '@/components/Skeleton'
 import PhotoUpload from '@/components/PhotoUpload'
 import WarehouseFloorPlan from '@/components/WarehouseFloorPlan'
-import { cn } from '@/lib/utils'
+import { cn, todayIso, sanitizeFileName } from '@/lib/utils'
 
 const inputClass = 'w-full text-sm border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-800 dark:text-slate-200'
 const labelClass = 'block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1'
@@ -211,8 +211,29 @@ export default function WarehousesPage() {
     }
   }
 
+  function exportWarehouseCsv(warehouse: Warehouse) {
+    const warehouseSections = sections.filter(s => s.warehouse_id === warehouse.id)
+    const header = ['Sección', 'Artículo', 'Cantidad', 'Unidad', 'Notas', 'Tiene fotos']
+    const rows = warehouseSections.flatMap(s => {
+      const sectionItems = items.filter(i => i.section_id === s.id)
+      if (sectionItems.length === 0) return [[s.name, '—', '', '', '', '']]
+      return sectionItems.map(i => [s.name, i.name, i.quantity, i.unit, i.notes ?? '', i.photos.length > 0 ? 'Sí' : 'No'])
+    })
+    const csv = [header, ...rows]
+      .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';'))
+      .join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `almacen-${sanitizeFileName(warehouse.name)}-${todayIso()}.csv`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   if (loadingWarehouses || loadingSections || loadingItems) return <PageLoading rows={6} />
 
+  const activeWarehouse = warehouses.find(w => w.id === activeWarehouseId)
   const activeSections = sections.filter(s => s.warehouse_id === activeWarehouseId)
   const searchTrim = search.trim().toLowerCase()
   const searchResults = searchTrim
@@ -303,13 +324,20 @@ export default function WarehousesPage() {
             ))}
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <p className="text-xs text-gray-500 dark:text-slate-400">{activeSections.length} sección(es)</p>
-            {drawMode ? (
-              <Button size="sm" variant="outline" onClick={cancelDraw}><X size={14} /> Cancelar dibujo</Button>
-            ) : (
-              <Button size="sm" variant="outline" onClick={openNewSection}><Plus size={14} /> Añadir sección</Button>
-            )}
+            <div className="flex gap-2">
+              {activeWarehouse && (
+                <Button size="sm" variant="outline" onClick={() => exportWarehouseCsv(activeWarehouse)}>
+                  <FileSpreadsheet size={14} /> Descargar recuento (CSV)
+                </Button>
+              )}
+              {drawMode ? (
+                <Button size="sm" variant="outline" onClick={cancelDraw}><X size={14} /> Cancelar dibujo</Button>
+              ) : (
+                <Button size="sm" variant="outline" onClick={openNewSection}><Plus size={14} /> Añadir sección</Button>
+              )}
+            </div>
           </div>
 
           <WarehouseFloorPlan
