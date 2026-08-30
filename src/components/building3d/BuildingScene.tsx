@@ -99,7 +99,15 @@ function MassVolume({ points, bottomY, topY, color, dimmed }: {
   if (!geometry) return null
   return (
     <mesh geometry={geometry} position={[0, bottomY, 0]} raycast={() => null}>
-      <meshStandardMaterial color={color} transparent opacity={dimmed ? 0.15 : 1} roughness={0.55} metalness={0.05} />
+      <meshStandardMaterial
+        color={color}
+        transparent
+        opacity={dimmed ? 0.1 : 0.38}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+        roughness={0.4}
+        metalness={0.05}
+      />
     </mesh>
   )
 }
@@ -114,7 +122,7 @@ function RoofCap({ topY, dimmed }: { topY: number; dimmed: boolean }) {
   }, [])
   return (
     <mesh geometry={geometry} position={[0, topY, 0]} raycast={() => null}>
-      <meshStandardMaterial color={ROOF_GREY} transparent opacity={dimmed ? 0.15 : 1} roughness={0.8} />
+      <meshStandardMaterial color={ROOF_GREY} transparent opacity={dimmed ? 0.15 : 0.85} roughness={0.8} />
     </mesh>
   )
 }
@@ -160,33 +168,58 @@ function Marker({ marker, width, depth, color, onClick }: {
   const x = (marker.pos_x - 0.5) * width
   const y = (marker.pos_y - 0.5) * depth
   return (
-    <group position={[x, y, 0.35]} onClick={onClick}>
+    <group position={[x, y, 0.35]} onClick={onClick} renderOrder={10}>
       <mesh>
         <sphereGeometry args={[0.22, 16, 16]} />
-        <meshStandardMaterial color={color.fill} emissive={color.fill} emissiveIntensity={0.35} />
+        <meshStandardMaterial color={color.fill} emissive={color.fill} emissiveIntensity={0.5} depthTest={false} />
       </mesh>
       <mesh position={[0, 0, -0.15]}>
         <cylinderGeometry args={[0.02, 0.02, 0.3, 6]} />
-        <meshStandardMaterial color={color.ring} />
+        <meshStandardMaterial color={color.ring} depthTest={false} />
       </mesh>
     </group>
   )
 }
 
-function FloorInteractionLayer({ floor, markers, dimmed, markerColor, onMarkerClick, onFloorClick }: {
+// Contorno de la planta (líneas del borde) para que se vea dónde está cada
+// nivel dentro de la carcasa translúcida, sin depender solo del relleno.
+function FloorOutline({ width, depth, opacity }: { width: number; depth: number; opacity: number }) {
+  const geometry = useMemo(() => {
+    const hw = width / 2
+    const hd = depth / 2
+    return new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-hw, -hd, 0.01),
+      new THREE.Vector3(hw, -hd, 0.01),
+      new THREE.Vector3(hw, hd, 0.01),
+      new THREE.Vector3(-hw, hd, 0.01),
+    ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, depth])
+  return (
+    <lineLoop geometry={geometry}>
+      <lineBasicMaterial color="#ffffff" transparent opacity={opacity} />
+    </lineLoop>
+  )
+}
+
+function FloorInteractionLayer({ floor, markers, isActive, hasSelection, markerColor, onMarkerClick, onFloorClick }: {
   floor: BuildingFloor
   markers: BuildingMarker[]
-  dimmed: boolean
+  isActive: boolean
+  hasSelection: boolean
   markerColor: (marker: BuildingMarker) => MarkerColor
   onMarkerClick: (marker: BuildingMarker) => void
   onFloorClick: (posX: number, posY: number) => void
 }) {
   const width = isPodiumFloor(floor) ? PODIUM_WIDTH : STORE_WIDTH
   const depth = isPodiumFloor(floor) ? PODIUM_DEPTH : STORE_DEPTH
+  const disableClick = hasSelection && !isActive
+  const fillOpacity = isActive ? 0.4 : hasSelection ? 0.03 : 0.16
+  const outlineOpacity = isActive ? 0.9 : hasSelection ? 0.06 : 0.4
 
   function handleSurfaceClick(e: ThreeEvent<MouseEvent>) {
     e.stopPropagation()
-    if (dimmed || !e.uv) return
+    if (disableClick || !e.uv) return
     onFloorClick(e.uv.x, e.uv.y)
   }
 
@@ -195,10 +228,11 @@ function FloorInteractionLayer({ floor, markers, dimmed, markerColor, onMarkerCl
       position={[0, floor.floor_order * FLOOR_HEIGHT, 0]}
       rotation={[-Math.PI / 2, 0, 0]}
     >
-      <mesh onClick={handleSurfaceClick} raycast={dimmed ? () => null : undefined}>
+      <mesh onClick={handleSurfaceClick} raycast={disableClick ? () => null : undefined}>
         <planeGeometry args={[width, depth]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        <meshBasicMaterial color="#bfdbfe" transparent opacity={fillOpacity} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>
+      <FloorOutline width={width} depth={depth} opacity={outlineOpacity} />
       {markers.map(m => (
         <Marker
           key={m.id}
@@ -225,7 +259,8 @@ function SceneContent({ floors, markers, activeFloorId, markerColor, onMarkerCli
           key={floor.id}
           floor={floor}
           markers={markers.filter(m => m.floor_id === floor.id)}
-          dimmed={activeFloorId !== null && activeFloorId !== floor.id}
+          isActive={activeFloorId === floor.id}
+          hasSelection={activeFloorId !== null}
           markerColor={markerColor}
           onMarkerClick={onMarkerClick}
           onFloorClick={(x, y) => onFloorClick(floor.id, x, y)}
