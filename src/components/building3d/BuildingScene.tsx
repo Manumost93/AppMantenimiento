@@ -1,6 +1,7 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { Canvas, extend, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import * as THREE from 'three'
 import type { BuildingFloor, BuildingMarker } from '@/types'
 
 extend({ OrbitControls })
@@ -13,12 +14,29 @@ declare module '@react-three/fiber' {
 }
 
 export const FLOOR_HEIGHT = 3.2
-// Nave rectangular alargada tipo "big box" (proporción aprox. de una tienda
-// IKEA vista desde el aire) — no es el contorno exacto de Alcorcón, es una
-// forma representativa que se puede afinar más adelante.
-export const BUILDING_WIDTH = 16
-export const BUILDING_DEPTH = 9
 const IKEA_BLUE = '#0051BA'
+const ROOF_GREY = '#cbd5e1'
+
+// Masa del edificio a partir de los planos arquitectónicos reales (planos de
+// mayo 2015): la tienda IKEA Alcorcón se asienta sobre un podio de parking
+// (Sótano -2 + Planta Baja/Parking -1) que ocupa casi toda la parcela, y
+// encima un volumen más estrecho con la tienda (Planta Primera + Planta
+// Segunda) y la cubierta. No son las coordenadas exactas de cada muro (eso
+// necesitaría trazarlas a escala desde el PDF con más precisión), pero sí
+// reflejan la proporción y el escalonado reales en vez de una caja lisa:
+// esquina achaflanada donde está la rampa/marquesina de entrada, y el
+// saliente de los muelles de carga en la parte trasera.
+const PODIUM_POINTS: [number, number][] = [
+  [-10, -6], [-10, 3], [-8, 6], [10, 6], [10, -6],
+]
+const STORE_POINTS: [number, number][] = [
+  [-7, -4], [-7, 2.5], [-5.5, 4], [7, 4], [7, -4], [6, -4], [6, -7], [2, -7], [2, -4],
+]
+
+export const PODIUM_WIDTH = 20
+export const PODIUM_DEPTH = 12
+export const STORE_WIDTH = 14
+export const STORE_DEPTH = 8
 
 export type MarkerColor = { fill: string; ring: string }
 
@@ -29,6 +47,20 @@ interface BuildingSceneProps {
   markerColor: (marker: BuildingMarker) => MarkerColor
   onMarkerClick: (marker: BuildingMarker) => void
   onFloorClick: (floorId: number, posX: number, posY: number) => void
+}
+
+// Planta baja (parking, floor_order <= 0) usa el podio ancho; Planta Primera
+// en adelante (floor_order > 0) usa el volumen más estrecho de la tienda.
+function isPodiumFloor(floor: BuildingFloor) {
+  return floor.floor_order <= 0
+}
+
+function shapeFromPoints(points: [number, number][]) {
+  const shape = new THREE.Shape()
+  shape.moveTo(points[0][0], points[0][1])
+  for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0], points[i][1])
+  shape.closePath()
+  return shape
 }
 
 function Controls() {
@@ -42,45 +74,91 @@ function Controls() {
       enableDamping
       dampingFactor={0.08}
       minDistance={4}
-      maxDistance={Math.max(BUILDING_WIDTH, BUILDING_DEPTH) * 4}
+      maxDistance={Math.max(PODIUM_WIDTH, PODIUM_DEPTH) * 4}
       maxPolarAngle={Math.PI / 2.05}
     />
   )
 }
 
-// El edificio se dibuja como UN único bloque (no una caja por planta) porque
-// por fuera una nave real no muestra las divisiones de planta — solo el
-// plano invisible de clics y los marcadores van por planta.
-function BuildingVolume({ floors, dimmed }: { floors: BuildingFloor[]; dimmed: boolean }) {
+function MassVolume({ points, bottomY, topY, color, dimmed }: {
+  points: [number, number][]
+  bottomY: number
+  topY: number
+  color: string
+  dimmed: boolean
+}) {
+  const depth = topY - bottomY
+  const geometry = useMemo(() => {
+    if (depth <= 0) return null
+    const geo = new THREE.ExtrudeGeometry(shapeFromPoints(points), { depth, bevelEnabled: false })
+    geo.rotateX(-Math.PI / 2)
+    return geo
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, depth])
+
+  if (!geometry) return null
+  return (
+    <mesh geometry={geometry} position={[0, bottomY, 0]} raycast={() => null}>
+      <meshStandardMaterial color={color} transparent opacity={dimmed ? 0.15 : 1} roughness={0.55} metalness={0.05} />
+    </mesh>
+  )
+}
+
+function RoofCap({ topY, dimmed }: { topY: number; dimmed: boolean }) {
+  const thickness = 0.25
+  const geometry = useMemo(() => {
+    const scaled = STORE_POINTS.map(([x, y]) => [x * 1.04, y * 1.04] as [number, number])
+    const geo = new THREE.ExtrudeGeometry(shapeFromPoints(scaled), { depth: thickness, bevelEnabled: false })
+    geo.rotateX(-Math.PI / 2)
+    return geo
+  }, [])
+  return (
+    <mesh geometry={geometry} position={[0, topY, 0]} raycast={() => null}>
+      <meshStandardMaterial color={ROOF_GREY} transparent opacity={dimmed ? 0.15 : 1} roughness={0.8} />
+    </mesh>
+  )
+}
+
+function BuildingMass({ floors, dimmed }: { floors: BuildingFloor[]; dimmed: boolean }) {
   if (floors.length === 0) return null
-  const orders = floors.map(f => f.floor_order)
-  const bottomY = Math.min(...orders) * FLOOR_HEIGHT - FLOOR_HEIGHT * 0.5
-  const topY = Math.max(...orders) * FLOOR_HEIGHT + FLOOR_HEIGHT * 0.5
-  const height = topY - bottomY
-  const centerY = (topY + bottomY) / 2
-  const roofThickness = 0.25
+  const podiumFloors = floors.filter(isPodiumFloor)
+  const storeFloors = floors.filter(f => !isPodiumFloor(f))
+
+  const rangeFor = (fl: BuildingFloor[]) => {
+    if (fl.length === 0) return null
+    const orders = fl.map(f => f.floor_order)
+    return {
+      bottomY: Math.min(...orders) * FLOOR_HEIGHT - FLOOR_HEIGHT * 0.5,
+      topY: Math.max(...orders) * FLOOR_HEIGHT + FLOOR_HEIGHT * 0.5,
+    }
+  }
+
+  const podiumRange = rangeFor(podiumFloors)
+  const storeRange = rangeFor(storeFloors)
+  const topY = storeRange?.topY ?? podiumRange?.topY ?? 0
 
   return (
     <group>
-      <mesh position={[0, centerY, 0]}>
-        <boxGeometry args={[BUILDING_WIDTH, height, BUILDING_DEPTH]} />
-        <meshStandardMaterial color={IKEA_BLUE} transparent opacity={dimmed ? 0.2 : 1} roughness={0.55} metalness={0.05} />
-      </mesh>
-      <mesh position={[0, topY + roofThickness / 2, 0]}>
-        <boxGeometry args={[BUILDING_WIDTH * 1.02, roofThickness, BUILDING_DEPTH * 1.02]} />
-        <meshStandardMaterial color="#cbd5e1" transparent opacity={dimmed ? 0.2 : 1} roughness={0.8} />
-      </mesh>
+      {podiumRange && (
+        <MassVolume points={PODIUM_POINTS} bottomY={podiumRange.bottomY} topY={podiumRange.topY} color={IKEA_BLUE} dimmed={dimmed} />
+      )}
+      {storeRange && (
+        <MassVolume points={STORE_POINTS} bottomY={storeRange.bottomY} topY={storeRange.topY} color={IKEA_BLUE} dimmed={dimmed} />
+      )}
+      <RoofCap topY={topY} dimmed={dimmed} />
     </group>
   )
 }
 
-function Marker({ marker, color, onClick }: {
+function Marker({ marker, width, depth, color, onClick }: {
   marker: BuildingMarker
+  width: number
+  depth: number
   color: MarkerColor
   onClick: (e: ThreeEvent<MouseEvent>) => void
 }) {
-  const x = (marker.pos_x - 0.5) * BUILDING_WIDTH
-  const y = (marker.pos_y - 0.5) * BUILDING_DEPTH
+  const x = (marker.pos_x - 0.5) * width
+  const y = (marker.pos_y - 0.5) * depth
   return (
     <group position={[x, y, 0.35]} onClick={onClick}>
       <mesh>
@@ -103,6 +181,9 @@ function FloorInteractionLayer({ floor, markers, dimmed, markerColor, onMarkerCl
   onMarkerClick: (marker: BuildingMarker) => void
   onFloorClick: (posX: number, posY: number) => void
 }) {
+  const width = isPodiumFloor(floor) ? PODIUM_WIDTH : STORE_WIDTH
+  const depth = isPodiumFloor(floor) ? PODIUM_DEPTH : STORE_DEPTH
+
   function handleSurfaceClick(e: ThreeEvent<MouseEvent>) {
     e.stopPropagation()
     if (dimmed || !e.uv) return
@@ -115,13 +196,15 @@ function FloorInteractionLayer({ floor, markers, dimmed, markerColor, onMarkerCl
       rotation={[-Math.PI / 2, 0, 0]}
     >
       <mesh onClick={handleSurfaceClick} raycast={dimmed ? () => null : undefined}>
-        <planeGeometry args={[BUILDING_WIDTH, BUILDING_DEPTH]} />
+        <planeGeometry args={[width, depth]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
       {markers.map(m => (
         <Marker
           key={m.id}
           marker={m}
+          width={width}
+          depth={depth}
           color={markerColor(m)}
           onClick={e => { e.stopPropagation(); onMarkerClick(m) }}
         />
@@ -136,7 +219,7 @@ function SceneContent({ floors, markers, activeFloorId, markerColor, onMarkerCli
       <ambientLight intensity={0.7} />
       <directionalLight position={[8, 12, 6]} intensity={0.9} />
       <directionalLight position={[-8, 6, -6]} intensity={0.3} />
-      <BuildingVolume floors={floors} dimmed={activeFloorId !== null} />
+      <BuildingMass floors={floors} dimmed={activeFloorId !== null} />
       {floors.map(floor => (
         <FloorInteractionLayer
           key={floor.id}
@@ -155,11 +238,11 @@ function SceneContent({ floors, markers, activeFloorId, markerColor, onMarkerCli
 
 export default function BuildingScene(props: BuildingSceneProps) {
   const floorCount = Math.max(props.floors.length, 1)
-  const camY = FLOOR_HEIGHT * floorCount * 0.6 + BUILDING_DEPTH * 0.4
+  const camY = FLOOR_HEIGHT * floorCount * 0.6 + PODIUM_DEPTH * 0.4
 
   return (
     <Canvas
-      camera={{ position: [BUILDING_WIDTH * 0.7, camY, BUILDING_DEPTH * 1.6], fov: 50 }}
+      camera={{ position: [PODIUM_WIDTH * 0.7, camY, PODIUM_DEPTH * 1.4], fov: 50 }}
       gl={{ antialias: true }}
       style={{ background: 'transparent' }}
     >
