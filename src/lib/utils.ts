@@ -83,6 +83,20 @@ export function isOverdue(dateStr: string, status: TaskStatus): boolean {
   return dateStr < todayIso()
 }
 
+// Supabase Storage rechaza claves con espacios, acentos o símbolos ("Invalid
+// key") — esto deja el nombre en algo seguro para usarlo como ruta de subida.
+export function sanitizeFileName(name: string): string {
+  const dot = name.lastIndexOf('.')
+  const base = dot > 0 ? name.slice(0, dot) : name
+  const ext = dot > 0 ? name.slice(dot) : ''
+  const clean = base
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+  return (clean || 'archivo') + ext.toLowerCase()
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')

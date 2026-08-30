@@ -19,7 +19,7 @@ import BuildingScene from '@/components/building3d/BuildingScene'
 import CriticalAssetPicker from '@/components/CriticalAssetPicker'
 import EdgeAssetPicker from '@/components/EdgeAssetPicker'
 import { ASSET_TYPE_META, STATUS_META } from '@/lib/edgeAssets'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency, sanitizeFileName } from '@/lib/utils'
 
 const inputClass = 'w-full text-sm border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-800 dark:text-slate-200'
 const labelClass = 'block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1'
@@ -153,7 +153,7 @@ export default function BuildingModelPage() {
     try {
       let plan_image_url = floorForm.plan_image_url
       if (floorFile) {
-        const path = `${Date.now()}-${floorFile.name}`
+        const path = `${Date.now()}-${sanitizeFileName(floorFile.name)}`
         plan_image_url = await uploadBuildingPlanImage(floorFile, path)
       }
       const saved = await upsertBuildingFloor({ ...floorForm, plan_image_url })
