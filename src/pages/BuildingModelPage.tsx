@@ -285,7 +285,8 @@ export default function BuildingModelPage() {
           </div>
           <div>
             <label className={labelClass}>Foto del plano</label>
-            <input type="file" accept="image/*" className={inputClass} onChange={e => setFloorFile(e.target.files?.[0] ?? null)} />
+            <input type="file" accept="image/*,application/pdf" className={inputClass} onChange={e => setFloorFile(e.target.files?.[0] ?? null)} />
+            <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">Puedes subir una imagen o directamente un PDF (se abrirá en pestaña nueva al verlo).</p>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setShowFloorDialog(false)}>Cancelar</Button>
@@ -433,7 +434,16 @@ export default function BuildingModelPage() {
       <Dialog open={!!viewingPlanFloor} onClose={() => setViewingPlanFloor(null)} title={viewingPlanFloor?.name} size="xl">
         {viewingPlanFloor?.plan_image_url && (
           <div className="p-3">
-            <img src={viewingPlanFloor.plan_image_url} alt={viewingPlanFloor.name} className="w-full h-auto rounded-lg" />
+            {viewingPlanFloor.plan_image_url.toLowerCase().endsWith('.pdf') ? (
+              <div className="text-center py-10">
+                <p className="text-sm text-gray-500 dark:text-slate-400 mb-3">Este plano es un PDF, no se puede previsualizar aquí.</p>
+                <a href={viewingPlanFloor.plan_image_url} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm">Abrir PDF en pestaña nueva</Button>
+                </a>
+              </div>
+            ) : (
+              <img src={viewingPlanFloor.plan_image_url} alt={viewingPlanFloor.name} className="w-full h-auto rounded-lg" />
+            )}
           </div>
         )}
       </Dialog>
