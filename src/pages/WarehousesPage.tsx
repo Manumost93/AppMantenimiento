@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Warehouse as WarehouseIcon, Plus, Trash2, Edit2, Search, Package, ArrowLeft, PenLine, X, FileSpreadsheet } from 'lucide-react'
+import { Warehouse as WarehouseIcon, Plus, Trash2, Edit2, Search, Package, ArrowLeft, PenLine, X, FileSpreadsheet, FileDown, LayoutGrid } from 'lucide-react'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -11,7 +13,7 @@ import {
   getWarehouseSections, upsertWarehouseSection, deleteWarehouseSection,
   getWarehouseItems, upsertWarehouseItem, deleteWarehouseItem, uploadWarehousePhoto,
 } from '@/lib/supabase'
-import type { Warehouse, WarehouseSection, WarehouseItem } from '@/types'
+import type { Warehouse, WarehouseSection, WarehouseItem, WarehouseKind } from '@/types'
 import { PageLoading } from '@/components/Skeleton'
 import PhotoUpload from '@/components/PhotoUpload'
 import WarehouseFloorPlan from '@/components/WarehouseFloorPlan'
@@ -29,10 +31,24 @@ export default function WarehousesPage() {
   const { data: sections, setData: setSections, loading: loadingSections } = useRealtimeTable('warehouse_sections', getWarehouseSections)
   const { data: items, setData: setItems, loading: loadingItems } = useRealtimeTable('warehouse_items', getWarehouseItems)
 
+  const [viewKind, setViewKind] = useState<WarehouseKind>('warehouse')
+  const kindWarehouses = warehouses.filter(w => w.kind === viewKind)
+  const kindLabel = viewKind === 'rack' ? 'racking' : 'almacén'
+  const kindLabelCap = viewKind === 'rack' ? 'Racking' : 'Almacén'
+  const sectionLabel = viewKind === 'rack' ? 'zona' : 'sección'
+  const sectionLabelCap = viewKind === 'rack' ? 'Zona' : 'Sección'
+
   const [activeWarehouseId, setActiveWarehouseId] = useState<number | null>(null)
   useEffect(() => {
-    if (activeWarehouseId === null && warehouses.length > 0) setActiveWarehouseId(warehouses[0].id)
-  }, [warehouses, activeWarehouseId])
+    if (kindWarehouses.length === 0) { setActiveWarehouseId(null); return }
+    if (!kindWarehouses.some(w => w.id === activeWarehouseId)) setActiveWarehouseId(kindWarehouses[0].id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewKind, warehouses])
+
+  function switchKind(kind: WarehouseKind) {
+    setViewKind(kind)
+    setSearch('')
+  }
 
   const [search, setSearch] = useState('')
 
@@ -55,37 +71,39 @@ export default function WarehousesPage() {
   const [savingItem, setSavingItem] = useState(false)
 
   function openNewWarehouse() {
-    setWarehouseForm({})
+    setWarehouseForm({ kind: viewKind })
     setShowWarehouseDialog(true)
   }
 
   async function handleSaveWarehouse() {
-    if (!warehouseForm.name?.trim()) { toast.error('Ponle un nombre al almacén'); return }
+    if (!warehouseForm.name?.trim()) { toast.error(`Ponle un nombre al ${kindLabel}`); return }
     setSavingWarehouse(true)
     try {
       const saved = await upsertWarehouse(warehouseForm)
       setWarehouses(prev => warehouseForm.id ? prev.map(w => w.id === saved.id ? saved : w) : [...prev, saved])
       setActiveWarehouseId(saved.id)
-      toast.success('Almacén guardado')
+      toast.success(`${kindLabelCap} guardado`)
       setShowWarehouseDialog(false)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al guardar el almacén')
+      toast.error(e instanceof Error ? e.message : `Error al guardar el ${kindLabel}`)
     } finally {
       setSavingWarehouse(false)
     }
   }
 
   async function handleDeleteWarehouse(w: Warehouse) {
-    const ok = await confirm({ title: 'Eliminar almacén', message: `¿Eliminar "${w.name}"? Se eliminarán también sus secciones y artículos.` })
+    const label = w.kind === 'rack' ? 'racking' : 'almacén'
+    const sectionOrZone = w.kind === 'rack' ? 'zonas' : 'secciones'
+    const ok = await confirm({ title: `Eliminar ${label}`, message: `¿Eliminar "${w.name}"? Se eliminarán también sus ${sectionOrZone} y artículos.` })
     if (!ok) return
     try {
       await deleteWarehouse(w.id, w.name)
       setWarehouses(prev => prev.filter(x => x.id !== w.id))
       setSections(prev => prev.filter(s => s.warehouse_id !== w.id))
       if (activeWarehouseId === w.id) setActiveWarehouseId(null)
-      toast.success('Almacén eliminado')
+      toast.success(`${label === 'racking' ? 'Racking' : 'Almacén'} eliminado`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al eliminar el almacén')
+      toast.error(e instanceof Error ? e.message : `Error al eliminar el ${label}`)
     }
   }
 
@@ -96,7 +114,7 @@ export default function WarehousesPage() {
   }
 
   function handleStartDrawSection() {
-    if (!sectionForm.name?.trim()) { toast.error('Ponle un nombre a la sección'); return }
+    if (!sectionForm.name?.trim()) { toast.error(`Ponle un nombre a la ${sectionLabel}`); return }
     setShowSectionDialog(false)
     setPendingNewSection({ name: sectionForm.name.trim(), notes: sectionForm.notes })
   }
@@ -123,9 +141,9 @@ export default function WarehousesPage() {
           ...rect,
         })
         setSections(prev => [...prev, saved])
-        toast.success('Sección creada')
+        toast.success(`${sectionLabelCap} creada`)
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Error al crear la sección')
+        toast.error(e instanceof Error ? e.message : `Error al crear la ${sectionLabel}`)
       } finally {
         setSavingSection(false)
         setPendingNewSection(null)
@@ -146,16 +164,16 @@ export default function WarehousesPage() {
   }
 
   async function handleDeleteSection(s: WarehouseSection) {
-    const ok = await confirm({ title: 'Eliminar sección', message: `¿Eliminar "${s.name}"? Se eliminarán también sus artículos.` })
+    const ok = await confirm({ title: `Eliminar ${sectionLabel}`, message: `¿Eliminar "${s.name}"? Se eliminarán también sus artículos.` })
     if (!ok) return
     try {
       await deleteWarehouseSection(s.id, s.name)
       setSections(prev => prev.filter(x => x.id !== s.id))
       setItems(prev => prev.filter(i => i.section_id !== s.id))
       if (viewingSection?.id === s.id) setViewingSection(null)
-      toast.success('Sección eliminada')
+      toast.success(`${sectionLabelCap} eliminada`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al eliminar la sección')
+      toast.error(e instanceof Error ? e.message : `Error al eliminar la ${sectionLabel}`)
     }
   }
 
@@ -212,8 +230,9 @@ export default function WarehousesPage() {
   }
 
   function exportWarehouseCsv(warehouse: Warehouse) {
+    const label = warehouse.kind === 'rack' ? 'Zona' : 'Sección'
     const warehouseSections = sections.filter(s => s.warehouse_id === warehouse.id)
-    const header = ['Sección', 'Artículo', 'Cantidad', 'Unidad', 'Notas', 'Tiene fotos']
+    const header = [label, 'Artículo', 'Cantidad', 'Unidad', 'Notas', 'Tiene fotos']
     const rows = warehouseSections.flatMap(s => {
       const sectionItems = items.filter(i => i.section_id === s.id)
       if (sectionItems.length === 0) return [[s.name, '—', '', '', '', '']]
@@ -226,9 +245,36 @@ export default function WarehousesPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `almacen-${sanitizeFileName(warehouse.name)}-${todayIso()}.csv`
+    a.download = `${warehouse.kind}-${sanitizeFileName(warehouse.name)}-${todayIso()}.csv`
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  function exportWarehousePdf(warehouse: Warehouse) {
+    const label = warehouse.kind === 'rack' ? 'Zona' : 'Sección'
+    const title = warehouse.kind === 'rack' ? 'Racking' : 'Almacén'
+    const warehouseSections = sections.filter(s => s.warehouse_id === warehouse.id)
+    const rows = warehouseSections.flatMap(s => {
+      const sectionItems = items.filter(i => i.section_id === s.id)
+      if (sectionItems.length === 0) return [[s.name, '—', '', '', '']]
+      return sectionItems.map(i => [s.name, i.name, `${i.quantity} ${i.unit}`, i.notes ?? '—', i.photos.length > 0 ? 'Sí' : 'No'])
+    })
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    doc.setFontSize(13)
+    doc.text(`${title}: ${warehouse.name}`, 10, 14)
+    doc.setFontSize(8)
+    doc.setTextColor(100, 100, 100)
+    doc.text(`Inventario generado el ${new Date().toLocaleDateString('es-ES')} · ${rows.length} artículo(s)`, 10, 19)
+    autoTable(doc, {
+      startY: 24,
+      head: [[label, 'Artículo', 'Cantidad', 'Notas', 'Fotos']],
+      body: rows,
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    })
+    doc.save(`${warehouse.kind}-${sanitizeFileName(warehouse.name)}-${todayIso()}.pdf`)
   }
 
   if (loadingWarehouses || loadingSections || loadingItems) return <PageLoading rows={6} />
@@ -255,17 +301,42 @@ export default function WarehousesPage() {
             Almacenes Mantenimiento
           </h2>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-            Inventario por almacén y sección: cantidad, unidad y fotos de la mercancía.
+            Inventario por almacén/racking y {sectionLabel}: cantidad, unidad y fotos de la mercancía.
           </p>
         </div>
-        <Button size="sm" onClick={openNewWarehouse}><Plus size={14} /> Añadir almacén</Button>
+        <Button size="sm" onClick={openNewWarehouse}><Plus size={14} /> Añadir {kindLabel}</Button>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => switchKind('warehouse')}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border',
+            viewKind === 'warehouse'
+              ? 'bg-gray-800 dark:bg-slate-600 text-white border-gray-800 dark:border-slate-600'
+              : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-700'
+          )}
+        >
+          <WarehouseIcon size={13} /> Almacenes
+        </button>
+        <button
+          onClick={() => switchKind('rack')}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border',
+            viewKind === 'rack'
+              ? 'bg-gray-800 dark:bg-slate-600 text-white border-gray-800 dark:border-slate-600'
+              : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-700'
+          )}
+        >
+          <LayoutGrid size={13} /> Racking taller
+        </button>
       </div>
 
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           className={cn(inputClass, 'pl-9')}
-          placeholder="Buscar artículo en todos los almacenes..."
+          placeholder="Buscar artículo en todos los almacenes y racking..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -293,18 +364,18 @@ export default function WarehousesPage() {
             )}
           </CardContent>
         </Card>
-      ) : warehouses.length === 0 ? (
+      ) : kindWarehouses.length === 0 ? (
         <Card>
           <CardContent className="text-center py-10">
             <WarehouseIcon size={28} className="mx-auto text-gray-300 dark:text-slate-600 mb-2" />
-            <p className="text-sm text-gray-500 dark:text-slate-400 mb-3">Todavía no hay ningún almacén. Añade el primero.</p>
-            <Button size="sm" onClick={openNewWarehouse}><Plus size={14} /> Añadir almacén</Button>
+            <p className="text-sm text-gray-500 dark:text-slate-400 mb-3">Todavía no hay ningún {kindLabel}. Añade el primero.</p>
+            <Button size="sm" onClick={openNewWarehouse}><Plus size={14} /> Añadir {kindLabel}</Button>
           </CardContent>
         </Card>
       ) : (
         <>
           <div className="flex items-center gap-2 flex-wrap">
-            {warehouses.map(w => (
+            {kindWarehouses.map(w => (
               <div key={w.id} className="flex items-center">
                 <button
                   onClick={() => setActiveWarehouseId(w.id)}
@@ -317,7 +388,7 @@ export default function WarehousesPage() {
                 >
                   {w.name}
                 </button>
-                <button onClick={() => handleDeleteWarehouse(w)} className="ml-1 p-1 text-gray-300 hover:text-red-500" title="Eliminar almacén">
+                <button onClick={() => handleDeleteWarehouse(w)} className="ml-1 p-1 text-gray-300 hover:text-red-500" title={`Eliminar ${kindLabel}`}>
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -325,17 +396,22 @@ export default function WarehousesPage() {
           </div>
 
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <p className="text-xs text-gray-500 dark:text-slate-400">{activeSections.length} sección(es)</p>
-            <div className="flex gap-2">
+            <p className="text-xs text-gray-500 dark:text-slate-400">{activeSections.length} {sectionLabel}(es)</p>
+            <div className="flex gap-2 flex-wrap">
               {activeWarehouse && (
-                <Button size="sm" variant="outline" onClick={() => exportWarehouseCsv(activeWarehouse)}>
-                  <FileSpreadsheet size={14} /> Descargar recuento (CSV)
-                </Button>
+                <>
+                  <Button size="sm" variant="outline" onClick={() => exportWarehouseCsv(activeWarehouse)}>
+                    <FileSpreadsheet size={14} /> CSV
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => exportWarehousePdf(activeWarehouse)}>
+                    <FileDown size={14} /> PDF
+                  </Button>
+                </>
               )}
               {drawMode ? (
                 <Button size="sm" variant="outline" onClick={cancelDraw}><X size={14} /> Cancelar dibujo</Button>
               ) : (
-                <Button size="sm" variant="outline" onClick={openNewSection}><Plus size={14} /> Añadir sección</Button>
+                <Button size="sm" variant="outline" onClick={openNewSection}><Plus size={14} /> Añadir {sectionLabel}</Button>
               )}
             </div>
           </div>
@@ -345,17 +421,19 @@ export default function WarehousesPage() {
             drawMode={drawMode}
             onDrawComplete={handleFloorPlanDraw}
             onSectionClick={setViewingSection}
+            aspectRatio={viewKind === 'rack' ? '3 / 4' : '16 / 9'}
+            emptyLabel={viewKind === 'rack' ? 'Todavía no hay estantes/zonas dibujados en este racking.' : 'Todavía no hay secciones dibujadas en el plano.'}
           />
 
           {activeSections.some(s => s.pos_x == null) && (
             <div className="space-y-1.5">
-              <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Secciones sin ubicar en el plano</p>
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400">{sectionLabelCap}s sin ubicar en el plano</p>
               {activeSections.filter(s => s.pos_x == null).map(s => (
                 <div key={s.id} className="flex items-center justify-between gap-2 border border-gray-100 dark:border-slate-700 rounded-lg px-3 py-2">
                   <span className="text-sm text-gray-700 dark:text-slate-200">{s.name}</span>
                   <div className="flex gap-1">
                     <Button size="sm" variant="outline" onClick={() => startRedrawSection(s)}><PenLine size={13} /> Dibujar</Button>
-                    <button onClick={() => handleDeleteSection(s)} className="p-1.5 text-gray-300 hover:text-red-500" title="Eliminar sección">
+                    <button onClick={() => handleDeleteSection(s)} className="p-1.5 text-gray-300 hover:text-red-500" title={`Eliminar ${sectionLabel}`}>
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -366,11 +444,11 @@ export default function WarehousesPage() {
         </>
       )}
 
-      <Dialog open={showWarehouseDialog} onClose={() => setShowWarehouseDialog(false)} title="Nuevo almacén" size="sm">
+      <Dialog open={showWarehouseDialog} onClose={() => setShowWarehouseDialog(false)} title={viewKind === 'rack' ? 'Nuevo racking' : 'Nuevo almacén'} size="sm">
         <div className="p-5 space-y-3">
           <div>
             <label className={labelClass}>Nombre *</label>
-            <input className={inputClass} value={warehouseForm.name || ''} onChange={e => setWarehouseForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: Almacén Mantenimiento 1" />
+            <input className={inputClass} value={warehouseForm.name || ''} onChange={e => setWarehouseForm(f => ({ ...f, name: e.target.value }))} placeholder={viewKind === 'rack' ? 'Ej: Racking 1' : 'Ej: Almacén Mantenimiento 1'} />
           </div>
           <div>
             <label className={labelClass}>Ubicación</label>
@@ -387,17 +465,17 @@ export default function WarehousesPage() {
         </div>
       </Dialog>
 
-      <Dialog open={showSectionDialog} onClose={() => setShowSectionDialog(false)} title="Nueva sección" size="sm">
+      <Dialog open={showSectionDialog} onClose={() => setShowSectionDialog(false)} title={`Nueva ${sectionLabel}`} size="sm">
         <div className="p-5 space-y-3">
           <div>
             <label className={labelClass}>Nombre *</label>
-            <input className={inputClass} value={sectionForm.name || ''} onChange={e => setSectionForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: Estantería A, Zona eléctrico..." />
+            <input className={inputClass} value={sectionForm.name || ''} onChange={e => setSectionForm(f => ({ ...f, name: e.target.value }))} placeholder={viewKind === 'rack' ? 'Ej: Estante 1, Balda superior...' : 'Ej: Estantería A, Zona eléctrico...'} />
           </div>
           <div>
             <label className={labelClass}>Notas</label>
             <textarea className={inputClass} rows={2} value={sectionForm.notes || ''} onChange={e => setSectionForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
-          <p className="text-[11px] text-gray-400 dark:text-slate-500">Después de guardar el nombre, dibuja el rectángulo de la sección directamente sobre el plano del almacén.</p>
+          <p className="text-[11px] text-gray-400 dark:text-slate-500">Después de guardar el nombre, dibuja el rectángulo de la {sectionLabel} directamente sobre {viewKind === 'rack' ? 'la vista frontal del racking' : 'el plano del almacén'}.</p>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setShowSectionDialog(false)}>Cancelar</Button>
             <Button size="sm" onClick={handleStartDrawSection}><PenLine size={14} /> Continuar y dibujar</Button>
@@ -409,11 +487,11 @@ export default function WarehousesPage() {
         {viewingSection && (
           <div className="p-5 space-y-4">
             <div className="flex justify-end gap-2 -mt-2">
-              <Button size="sm" variant="outline" onClick={() => startRedrawSection(viewingSection)}><PenLine size={13} /> Redibujar en el plano</Button>
-              <Button size="sm" variant="danger" onClick={() => handleDeleteSection(viewingSection)}><Trash2 size={13} /> Eliminar sección</Button>
+              <Button size="sm" variant="outline" onClick={() => startRedrawSection(viewingSection)}><PenLine size={13} /> Redibujar</Button>
+              <Button size="sm" variant="danger" onClick={() => handleDeleteSection(viewingSection)}><Trash2 size={13} /> Eliminar {sectionLabel}</Button>
             </div>
             <div>
-              <label className={labelClass}>Fotos de la sección</label>
+              <label className={labelClass}>Fotos de la {sectionLabel}</label>
               <PhotoUpload
                 photos={viewingSection.photos}
                 onChange={handleSectionPhotosChange}

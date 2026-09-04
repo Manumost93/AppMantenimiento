@@ -564,9 +564,15 @@ export interface BuildingMarker {
 
 // ─── Almacenes Mantenimiento ───────────────────────────────────────────────
 
+// "rack" reutiliza el mismo modelo que "warehouse" (secciones + artículos con
+// cantidad/unidad/fotos) — solo cambia cómo se dibuja: un racking se ve en
+// vista frontal (estantes) en vez de plano de planta.
+export type WarehouseKind = 'warehouse' | 'rack'
+
 export interface Warehouse {
   id: number
   name: string
+  kind: WarehouseKind
   location?: string
   notes?: string
   created_at: string

@@ -21,9 +21,11 @@ interface Props {
   drawMode: boolean
   onDrawComplete: (rect: Rect) => void
   onSectionClick: (section: WarehouseSection) => void
+  aspectRatio?: string
+  emptyLabel?: string
 }
 
-export default function WarehouseFloorPlan({ sections, drawMode, onDrawComplete, onSectionClick }: Props) {
+export default function WarehouseFloorPlan({ sections, drawMode, onDrawComplete, onSectionClick, aspectRatio = '16 / 9', emptyLabel = 'Todavía no hay secciones dibujadas en el plano.' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [dragStart, setDragStart] = useState<Point | null>(null)
   const [dragCurrent, setDragCurrent] = useState<Point | null>(null)
@@ -77,7 +79,7 @@ export default function WarehouseFloorPlan({ sections, drawMode, onDrawComplete,
         'relative w-full rounded-xl border-2 overflow-hidden select-none bg-gray-50 dark:bg-slate-900',
         drawMode ? 'border-blue-400 cursor-crosshair' : 'border-gray-200 dark:border-slate-700'
       )}
-      style={{ aspectRatio: '16 / 9', touchAction: drawMode ? 'none' : 'auto' }}
+      style={{ aspectRatio, touchAction: drawMode ? 'none' : 'auto' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -109,7 +111,7 @@ export default function WarehouseFloorPlan({ sections, drawMode, onDrawComplete,
 
       {placed.length === 0 && !drawMode && (
         <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-400 dark:text-slate-500 px-4 text-center">
-          Todavía no hay secciones dibujadas en el plano.
+          {emptyLabel}
         </div>
       )}
 
