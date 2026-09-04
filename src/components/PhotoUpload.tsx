@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
-import { Camera, ImagePlus, X, Loader2, ZoomIn } from 'lucide-react'
+import { Camera, ImagePlus, X, Loader2, ZoomIn, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { uploadRepairPhoto } from '@/lib/supabase'
+import { useConfirm } from '@/contexts/ConfirmContext'
 
 interface Props {
   photos: string[]
@@ -34,10 +35,18 @@ async function compressToJpeg(file: File, maxPx = 1920, quality = 0.82): Promise
 }
 
 export default function PhotoUpload({ photos, onChange, prefix = 'photo-', readOnly = false, maxPhotos = 8, uploadFn = uploadRepairPhoto }: Props) {
+  const confirm = useConfirm()
   const [uploading, setUploading] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
+
+  async function handleDeletePhoto(index: number) {
+    const ok = await confirm({ title: 'Eliminar foto', message: '¿Eliminar esta foto? No se podrá recuperar.' })
+    if (!ok) return
+    onChange(photos.filter((_, j) => j !== index))
+    setLightbox(null)
+  }
 
   async function handleFile(file: File | undefined) {
     if (!file) return
@@ -78,7 +87,7 @@ export default function PhotoUpload({ photos, onChange, prefix = 'photo-', readO
               {!readOnly && (
                 <button
                   type="button"
-                  onClick={e => { e.stopPropagation(); onChange(photos.filter((_, j) => j !== i)) }}
+                  onClick={e => { e.stopPropagation(); handleDeletePhoto(i) }}
                   className="absolute top-1 right-1 w-5 h-5 bg-black/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                   title="Eliminar foto"
                 >
@@ -162,6 +171,14 @@ export default function PhotoUpload({ photos, onChange, prefix = 'photo-', readO
           >
             <X size={20} />
           </button>
+          {!readOnly && (
+            <button
+              className="absolute top-4 left-4 flex items-center gap-1.5 px-3 h-10 bg-red-600/90 text-white text-xs font-medium rounded-full hover:bg-red-600 transition-colors"
+              onClick={e => { e.stopPropagation(); handleDeletePhoto(photos.indexOf(lightbox)) }}
+            >
+              <Trash2 size={14} /> Eliminar foto
+            </button>
+          )}
           <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-xs">Toca fuera para cerrar</p>
         </div>
       )}
