@@ -32,7 +32,10 @@ export default function WarehousesPage() {
   const { data: items, setData: setItems, loading: loadingItems } = useRealtimeTable('warehouse_items', getWarehouseItems)
 
   const [viewKind, setViewKind] = useState<WarehouseKind>('warehouse')
-  const kindWarehouses = warehouses.filter(w => w.kind === viewKind)
+  // (w.kind ?? 'warehouse'): si el SQL de la columna "kind" aún no se ha
+  // ejecutado, los almacenes existentes vienen sin ese campo — se tratan
+  // como 'warehouse' en vez de desaparecer de la lista.
+  const kindWarehouses = warehouses.filter(w => (w.kind ?? 'warehouse') === viewKind)
   const kindLabel = viewKind === 'rack' ? 'racking' : 'almacén'
   const kindLabelCap = viewKind === 'rack' ? 'Racking' : 'Almacén'
   const sectionLabel = viewKind === 'rack' ? 'zona' : 'sección'
