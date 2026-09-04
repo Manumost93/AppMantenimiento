@@ -64,6 +64,12 @@ export default function WarehousesPage() {
   const [savingSection, setSavingSection] = useState(false)
 
   const [viewingSection, setViewingSection] = useState<WarehouseSection | null>(null)
+  const [sectionEditForm, setSectionEditForm] = useState<{ name: string; notes?: string }>({ name: '' })
+  const [savingSectionInfo, setSavingSectionInfo] = useState(false)
+  useEffect(() => {
+    if (viewingSection) setSectionEditForm({ name: viewingSection.name, notes: viewingSection.notes })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingSection?.id])
   const [pendingNewSection, setPendingNewSection] = useState<{ name: string; notes?: string } | null>(null)
   const [drawSectionId, setDrawSectionId] = useState<number | null>(null)
   const drawMode = pendingNewSection !== null || drawSectionId !== null
@@ -75,6 +81,11 @@ export default function WarehousesPage() {
 
   function openNewWarehouse() {
     setWarehouseForm({ kind: viewKind })
+    setShowWarehouseDialog(true)
+  }
+
+  function openEditWarehouse(w: Warehouse) {
+    setWarehouseForm({ ...w })
     setShowWarehouseDialog(true)
   }
 
@@ -188,6 +199,22 @@ export default function WarehousesPage() {
       setViewingSection(saved)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al guardar las fotos')
+    }
+  }
+
+  async function handleSaveSectionInfo() {
+    if (!viewingSection) return
+    if (!sectionEditForm.name.trim()) { toast.error(`Ponle un nombre a la ${sectionLabel}`); return }
+    setSavingSectionInfo(true)
+    try {
+      const saved = await upsertWarehouseSection({ ...viewingSection, name: sectionEditForm.name.trim(), notes: sectionEditForm.notes })
+      setSections(prev => prev.map(s => s.id === saved.id ? saved : s))
+      setViewingSection(saved)
+      toast.success('Nombre actualizado')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al guardar el nombre')
+    } finally {
+      setSavingSectionInfo(false)
     }
   }
 
@@ -391,7 +418,10 @@ export default function WarehousesPage() {
                 >
                   {w.name}
                 </button>
-                <button onClick={() => handleDeleteWarehouse(w)} className="ml-1 p-1 text-gray-300 hover:text-red-500" title={`Eliminar ${kindLabel}`}>
+                <button onClick={() => openEditWarehouse(w)} className="ml-1 p-1 text-gray-300 hover:text-blue-500" title={`Editar nombre del ${kindLabel}`}>
+                  <Edit2 size={12} />
+                </button>
+                <button onClick={() => handleDeleteWarehouse(w)} className="ml-0.5 p-1 text-gray-300 hover:text-red-500" title={`Eliminar ${kindLabel}`}>
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -447,7 +477,12 @@ export default function WarehousesPage() {
         </>
       )}
 
-      <Dialog open={showWarehouseDialog} onClose={() => setShowWarehouseDialog(false)} title={viewKind === 'rack' ? 'Nuevo racking' : 'Nuevo almacén'} size="sm">
+      <Dialog
+        open={showWarehouseDialog}
+        onClose={() => setShowWarehouseDialog(false)}
+        title={`${warehouseForm.id ? 'Editar' : 'Nuevo'} ${kindLabel}`}
+        size="sm"
+      >
         <div className="p-5 space-y-3">
           <div>
             <label className={labelClass}>Nombre *</label>
@@ -492,6 +527,21 @@ export default function WarehousesPage() {
             <div className="flex justify-end gap-2 -mt-2">
               <Button size="sm" variant="outline" onClick={() => startRedrawSection(viewingSection)}><PenLine size={13} /> Redibujar</Button>
               <Button size="sm" variant="danger" onClick={() => handleDeleteSection(viewingSection)}><Trash2 size={13} /> Eliminar {sectionLabel}</Button>
+            </div>
+            <div className="space-y-2 border-b border-gray-100 dark:border-slate-700 pb-4">
+              <div>
+                <label className={labelClass}>Nombre</label>
+                <input className={inputClass} value={sectionEditForm.name} onChange={e => setSectionEditForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <label className={labelClass}>Notas</label>
+                <textarea className={inputClass} rows={2} value={sectionEditForm.notes || ''} onChange={e => setSectionEditForm(f => ({ ...f, notes: e.target.value }))} />
+              </div>
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={handleSaveSectionInfo} disabled={savingSectionInfo}>
+                  <Edit2 size={13} /> {savingSectionInfo ? 'Guardando...' : 'Guardar nombre/notas'}
+                </Button>
+              </div>
             </div>
             <div>
               <label className={labelClass}>Fotos de la {sectionLabel}</label>
