@@ -649,3 +649,19 @@ export interface LogisticaAsset {
   created_by_id?: number
   created_at: string
 }
+
+// ─── Carros planos ──────────────────────────────────────────────────────────
+
+export type CartStatus = 'ok' | 'damaged' | 'maintenance' | 'retired'
+
+export interface Cart {
+  id: number
+  code: string
+  status: CartStatus
+  location?: string
+  notes?: string
+  photos: string[]
+  created_by_id?: number
+  created_at: string
+  updated_at: string
+}

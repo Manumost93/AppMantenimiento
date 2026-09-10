@@ -38,6 +38,7 @@ const BuildingModelPage = lazy(() => import('@/pages/BuildingModelPage'))
 const WarehousesPage = lazy(() => import('@/pages/WarehousesPage'))
 const GoyaPage = lazy(() => import('@/pages/GoyaPage'))
 const LogisticaPage = lazy(() => import('@/pages/LogisticaPage'))
+const CartsPage = lazy(() => import('@/pages/CartsPage'))
 
 function PageFallback() {
   return (
@@ -97,6 +98,7 @@ function AppRoutes() {
             <Route path="/warehouses" element={<WarehousesPage />} />
             <Route path="/goya" element={<GoyaPage />} />
             <Route path="/logistica" element={<LogisticaPage />} />
+            <Route path="/carts" element={<CartsPage />} />
             <Route path="/settings"   element={<SettingsPage />} />
             <Route path="*"           element={<Navigate to="/calendar" replace />} />
           </Routes>

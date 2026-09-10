@@ -3,7 +3,7 @@ import {
   Calendar, LayoutDashboard, User, Users, Truck, FolderOpen,
   Building2, Paintbrush2, UtensilsCrossed, Wrench,
   BarChart2, Settings, ChevronRight, Shield, ClipboardCheck, ShieldAlert, BookOpen, Trash2,
-  HardHat, Thermometer, Radar, History, Server, Activity, Gauge, Boxes, Cuboid, Warehouse, Store, Lock
+  HardHat, Thermometer, Radar, History, Server, Activity, Gauge, Boxes, Cuboid, Warehouse, Store, Lock, ShoppingCart
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -15,6 +15,7 @@ const navItems = [
   { path: '/repairs',   icon: Wrench,             label: 'Reparaciones',       section: 'work',   adminOnly: false },
   { path: '/rondas',    icon: ClipboardCheck,     label: 'Rondas Apertura/Cierre', section: 'work', adminOnly: false },
   { path: '/warehouses', icon: Warehouse,         label: 'Almacenes Mantenimiento', section: 'work', adminOnly: false },
+  { path: '/carts',     icon: ShoppingCart,       label: 'Carros planos',      section: 'work',   adminOnly: false },
   { path: '/goya',      icon: Store,              label: 'Tienda Goya',        section: 'work',   adminOnly: false },
   { path: '/logistica', icon: Lock,               label: 'Logística',          section: 'work',   adminOnly: false, onlyManuel: true },
   { path: '/security',  icon: ShieldAlert,        label: 'Seguridad',          section: 'areas',  adminOnly: false },

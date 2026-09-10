@@ -6,7 +6,7 @@ import type {
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
   AuditLog, EdgeAsset, EdgeAssetRepair, CriticalAsset, CriticalAssetRepair, CriticalAssetLite,
   BuildingFloor, BuildingMarker, Warehouse, WarehouseSection, WarehouseItem, GoyaTask,
-  LogisticaConfig, LogisticaAsset,
+  LogisticaConfig, LogisticaAsset, Cart,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -1701,4 +1701,55 @@ export async function addLogisticaAsset(criticalAssetId: number, createdById?: n
 export async function removeLogisticaAsset(id: number): Promise<void> {
   const { error } = await supabase.from('logistica_assets').delete().eq('id', id)
   if (error) throw error
+}
+
+// ─── Carros planos ──────────────────────────────────────────────────────────
+// SQL: database/carts_schema.sql
+// Storage: Dashboard → Storage → New bucket "cart-photos" (Public: ON)
+
+export async function getCarts(): Promise<Cart[]> {
+  const { data, error } = await supabase.from('carts').select('*').order('code')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function upsertCart(cart: Partial<Cart>): Promise<Cart> {
+  const { created_at, ...payload } = cart as Cart & { created_at?: unknown }
+  const isNew = !cart.id
+  const { data, error } = await supabase
+    .from('carts')
+    .upsert({ ...payload, updated_at: new Date().toISOString() })
+    .select('*')
+    .single()
+  if (error) throw error
+  createAuditLog({
+    action: isNew ? 'cart_created' : 'cart_updated',
+    module: 'carts',
+    entity_type: 'cart',
+    entity_id: data.id,
+    description: `Carro ${isNew ? 'creado' : 'actualizado'}: ${data.code}`,
+  })
+  return data
+}
+
+export async function deleteCart(id: number, code: string): Promise<void> {
+  const { error } = await supabase.from('carts').delete().eq('id', id)
+  if (error) throw error
+  createAuditLog({
+    action: 'cart_deleted',
+    module: 'carts',
+    entity_type: 'cart',
+    entity_id: id,
+    description: `Carro eliminado: ${code}`,
+    severity: 'warning',
+  })
+}
+
+export async function uploadCartPhoto(blob: Blob, path: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('cart-photos')
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: false })
+  if (error) throw error
+  const { data: { publicUrl } } = supabase.storage.from('cart-photos').getPublicUrl(data.path)
+  return publicUrl
 }
