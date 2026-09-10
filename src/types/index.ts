@@ -629,3 +629,23 @@ export interface GoyaTask {
   created_at: string
   updated_at: string
 }
+
+// ─── Logística (apartado privado) ──────────────────────────────────────────
+// Privacidad solo de interfaz (oculto de menú + bloqueado por nombre de
+// trabajador dentro de la página) — la RLS de Supabase sigue abierta, igual
+// que el resto de la app.
+
+export interface LogisticaConfig {
+  id: number
+  tracked_area_ids: number[]
+  updated_at: string
+}
+
+export interface LogisticaAsset {
+  id: number
+  critical_asset_id: number
+  asset?: CriticalAsset
+  notes?: string
+  created_by_id?: number
+  created_at: string
+}

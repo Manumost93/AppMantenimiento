@@ -37,6 +37,7 @@ const CriticalAssetRegistryPage = lazy(() => import('@/pages/CriticalAssetRegist
 const BuildingModelPage = lazy(() => import('@/pages/BuildingModelPage'))
 const WarehousesPage = lazy(() => import('@/pages/WarehousesPage'))
 const GoyaPage = lazy(() => import('@/pages/GoyaPage'))
+const LogisticaPage = lazy(() => import('@/pages/LogisticaPage'))
 
 function PageFallback() {
   return (
@@ -95,6 +96,7 @@ function AppRoutes() {
             <Route path="/building-3d" element={<BuildingModelPage />} />
             <Route path="/warehouses" element={<WarehousesPage />} />
             <Route path="/goya" element={<GoyaPage />} />
+            <Route path="/logistica" element={<LogisticaPage />} />
             <Route path="/settings"   element={<SettingsPage />} />
             <Route path="*"           element={<Navigate to="/calendar" replace />} />
           </Routes>

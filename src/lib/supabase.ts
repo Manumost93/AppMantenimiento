@@ -6,6 +6,7 @@ import type {
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
   AuditLog, EdgeAsset, EdgeAssetRepair, CriticalAsset, CriticalAssetRepair, CriticalAssetLite,
   BuildingFloor, BuildingMarker, Warehouse, WarehouseSection, WarehouseItem, GoyaTask,
+  LogisticaConfig, LogisticaAsset,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -1657,4 +1658,47 @@ export async function uploadGoyaTaskPhoto(blob: Blob, path: string): Promise<str
   if (error) throw error
   const { data: { publicUrl } } = supabase.storage.from('goya-photos').getPublicUrl(data.path)
   return publicUrl
+}
+
+// ─── Logística (apartado privado) ──────────────────────────────────────────
+// SQL: database/logistica_schema.sql
+
+export async function getLogisticaConfig(): Promise<LogisticaConfig> {
+  const { data, error } = await supabase.from('logistica_config').select('*').eq('id', 1).maybeSingle()
+  if (error) throw error
+  return data ?? { id: 1, tracked_area_ids: [], updated_at: new Date().toISOString() }
+}
+
+export async function upsertLogisticaConfig(trackedAreaIds: number[]): Promise<LogisticaConfig> {
+  const { data, error } = await supabase
+    .from('logistica_config')
+    .upsert({ id: 1, tracked_area_ids: trackedAreaIds, updated_at: new Date().toISOString() })
+    .select('*')
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function getLogisticaAssets(): Promise<LogisticaAsset[]> {
+  const { data, error } = await supabase
+    .from('logistica_assets')
+    .select('*, asset:critical_assets!critical_asset_id(*)')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(a => ({ ...a, asset: a.asset ?? undefined })) as LogisticaAsset[]
+}
+
+export async function addLogisticaAsset(criticalAssetId: number, createdById?: number): Promise<LogisticaAsset> {
+  const { data, error } = await supabase
+    .from('logistica_assets')
+    .insert({ critical_asset_id: criticalAssetId, created_by_id: createdById })
+    .select('*, asset:critical_assets!critical_asset_id(*)')
+    .single()
+  if (error) throw error
+  return { ...data, asset: data.asset ?? undefined } as LogisticaAsset
+}
+
+export async function removeLogisticaAsset(id: number): Promise<void> {
+  const { error } = await supabase.from('logistica_assets').delete().eq('id', id)
+  if (error) throw error
 }
