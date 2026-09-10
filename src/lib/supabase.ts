@@ -5,7 +5,7 @@ import type {
   PersonalNote, MaterialRequest, Document,
   WorkerTaskStats, RondaEntry, SecurityIncident, Meeting, WasteRequest,
   AuditLog, EdgeAsset, EdgeAssetRepair, CriticalAsset, CriticalAssetRepair, CriticalAssetLite,
-  BuildingFloor, BuildingMarker, Warehouse, WarehouseSection, WarehouseItem,
+  BuildingFloor, BuildingMarker, Warehouse, WarehouseSection, WarehouseItem, GoyaTask,
 } from '@/types'
 import type {
   SocCaseRecord, SocUrlAnalysisRecord, SocEmailAnalysisRecord,
@@ -1600,5 +1600,61 @@ export async function uploadWarehousePhoto(blob: Blob, path: string): Promise<st
     .upload(path, blob, { contentType: 'image/jpeg', upsert: false })
   if (error) throw error
   const { data: { publicUrl } } = supabase.storage.from('warehouse-photos').getPublicUrl(data.path)
+  return publicUrl
+}
+
+// ─── Tienda Goya ────────────────────────────────────────────────────────────
+// SQL: database/goya_tasks_schema.sql
+// Storage: Dashboard → Storage → New bucket "goya-photos" (Public: ON)
+
+export async function getGoyaTasks(): Promise<GoyaTask[]> {
+  const { data, error } = await supabase
+    .from('goya_tasks')
+    .select('*, responsible:workers!responsible_id(id,name,color)')
+    .order('floor', { ascending: false })
+    .order('created_at')
+  if (error) throw error
+  return (data ?? []).map(t => ({ ...t, responsible: t.responsible ?? undefined })) as GoyaTask[]
+}
+
+export async function upsertGoyaTask(task: Partial<GoyaTask>): Promise<GoyaTask> {
+  const { responsible, created_at, ...payload } = task as GoyaTask & { created_at?: unknown }
+  const isNew = !task.id
+  const { data, error } = await supabase
+    .from('goya_tasks')
+    .upsert({ ...payload, updated_at: new Date().toISOString() })
+    .select('*, responsible:workers!responsible_id(id,name,color)')
+    .single()
+  if (error) throw error
+  const result = { ...data, responsible: data.responsible ?? undefined } as GoyaTask
+  createAuditLog({
+    action: isNew ? 'goya_task_created' : 'goya_task_updated',
+    module: 'goya',
+    entity_type: 'goya_task',
+    entity_id: result.id,
+    description: `Tarea Goya ${isNew ? 'creada' : 'actualizada'}: ${result.title}`,
+  })
+  return result
+}
+
+export async function deleteGoyaTask(id: number, title: string): Promise<void> {
+  const { error } = await supabase.from('goya_tasks').delete().eq('id', id)
+  if (error) throw error
+  createAuditLog({
+    action: 'goya_task_deleted',
+    module: 'goya',
+    entity_type: 'goya_task',
+    entity_id: id,
+    description: `Tarea Goya eliminada: ${title}`,
+    severity: 'warning',
+  })
+}
+
+export async function uploadGoyaTaskPhoto(blob: Blob, path: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('goya-photos')
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: false })
+  if (error) throw error
+  const { data: { publicUrl } } = supabase.storage.from('goya-photos').getPublicUrl(data.path)
   return publicUrl
 }

@@ -160,6 +160,26 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           pushNotif('🍽️ Incidencia FOOD asignada', String(payload.new.affected_element ?? 'Nueva incidencia en restaurante'))
         }
       )
+      // ── Tienda Goya (INSERT) ──────────────────────────────────────────────
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: 'INSERT', schema: 'public', table: 'goya_tasks' },
+        (payload: { new: Record<string, unknown> }) => {
+          if (!isMe(payload.new.responsible_id)) return
+          pushNotif('🏬 Nueva tarea en Goya', String(payload.new.title ?? 'Tienes una nueva tarea en Tienda Goya'), String(payload.new.id))
+        }
+      )
+      // ── Tienda Goya (UPDATE — reasignación) ───────────────────────────────
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: 'UPDATE', schema: 'public', table: 'goya_tasks' },
+        (payload: { new: Record<string, unknown>; old: Record<string, unknown> }) => {
+          if (!isMe(payload.new.responsible_id) || isMe(payload.old.responsible_id)) return
+          pushNotif('🏬 Tarea de Goya asignada a ti', String(payload.new.title ?? 'Tienes una nueva tarea asignada en Tienda Goya'))
+        }
+      )
       .subscribe()
 
     channelRef.current = channel

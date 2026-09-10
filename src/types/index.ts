@@ -611,3 +611,21 @@ export interface WarehouseItem {
   created_at: string
   updated_at: string
 }
+
+// ─── Tienda Goya ────────────────────────────────────────────────────────────
+
+export type GoyaTaskStatus = 'pending' | 'inprogress' | 'done'
+
+export interface GoyaTask {
+  id: number
+  floor: number
+  title: string
+  notes?: string
+  status: GoyaTaskStatus
+  responsible_id?: number
+  responsible?: TeamMember
+  photos: string[]
+  created_by_id?: number
+  created_at: string
+  updated_at: string
+}
